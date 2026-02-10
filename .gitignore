@@ -1,0 +1,10 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.env
+.env.local
+*.key
+*.pem
+wardex-signer.sock
+coverage/
+.DS_Store

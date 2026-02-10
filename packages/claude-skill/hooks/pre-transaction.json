@@ -1,0 +1,19 @@
+{
+  "$schema": "https://raw.githubusercontent.com/anthropics/claude-code/main/schemas/hooks.json",
+  "description": "Wardex PreToolUse hook - intercepts wallet-related tool calls for security evaluation before execution",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "mcp__wallet__.*|mcp__crypto__.*|mcp__defi__.*|mcp__eth__send.*|mcp__eth__sign.*|mcp__eth__approve.*|mcp__ethers__.*|mcp__viem__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ../../packages/claude-skill/hooks/evaluate-transaction.mjs",
+            "timeout": 15,
+            "statusMessage": "Wardex: Evaluating transaction security..."
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "@wardex/core",
+  "version": "0.1.0",
+  "description": "Adaptive security for AI agent wallets - core evaluation engine",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "ethers": "^6.13.0",
+    "viem": "^2.21.0"
+  },
+  "peerDependencies": {
+    "@wardex/signer": "^0.1.0",
+    "@wardex/intelligence": "^0.1.0"
+  },
+  "peerDependenciesMeta": {
+    "@wardex/signer": { "optional": true },
+    "@wardex/intelligence": { "optional": true }
+  },
+  "license": "MIT"
+}

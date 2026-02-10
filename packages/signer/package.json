@@ -1,0 +1,17 @@
+{
+  "name": "@wardex/signer",
+  "version": "0.1.0",
+  "description": "Isolated signer service for Wardex - key material never touches the AI agent process",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "ethers": "^6.13.0"
+  },
+  "license": "MIT"
+}

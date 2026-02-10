@@ -1,0 +1,16 @@
+{
+  "name": "@wardex/claude-skill",
+  "version": "0.1.0",
+  "description": "Claude Code skill for Wardex wallet security - auto-activates on crypto transactions with PreToolUse hooks",
+  "type": "module",
+  "files": [
+    "SKILL.md",
+    "commands",
+    "hooks",
+    "settings-template.json"
+  ],
+  "dependencies": {
+    "@wardex/core": "^0.1.0"
+  },
+  "license": "MIT"
+}

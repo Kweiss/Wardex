@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "lastUpdated": "2026-02-10T00:00:00.000Z",
+  "entries": [
+    {
+      "address": "0x0000000000000000000000000000000000000000",
+      "reason": "Null address - tokens sent here are permanently lost",
+      "addedAt": "2026-01-01T00:00:00.000Z",
+      "source": "wardex-default",
+      "severity": "critical",
+      "tags": ["burn-address"]
+    },
+    {
+      "address": "0x000000000000000000000000000000000000dead",
+      "reason": "Common burn address - tokens sent here are permanently lost",
+      "addedAt": "2026-01-01T00:00:00.000Z",
+      "source": "wardex-default",
+      "severity": "high",
+      "tags": ["burn-address"]
+    }
+  ]
+}
