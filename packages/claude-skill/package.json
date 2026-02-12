@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "description": "Claude Code skill for Wardex wallet security - auto-activates on crypto transactions with PreToolUse hooks",
   "type": "module",
+  "scripts": {
+    "build": "echo 'No build needed for claude-skill'"
+  },
   "files": [
     "SKILL.md",
     "commands",

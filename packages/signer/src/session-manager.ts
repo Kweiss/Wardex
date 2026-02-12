@@ -83,7 +83,13 @@ const INFINITE_THRESHOLD = BigInt(2) ** BigInt(128); // > 2^128 = infinite
 export class SessionManager {
   private sessions: Map<string, SessionKey> = new Map();
   private sessionStates: Map<string, SessionState> = new Map();
-  private sessionPrivateKeys: Map<string, string> = new Map();
+  /**
+   * C-02 FIX: Store session private keys as Buffers instead of strings.
+   * Buffers can be zeroed in-place via .fill(0), ensuring key material
+   * is cleared from the ArrayBuffer memory (C++ heap) immediately.
+   * JS strings are immutable and persist in V8 heap until GC.
+   */
+  private sessionPrivateKeys: Map<string, Buffer> = new Map();
 
   /**
    * Creates a new session key with the given boundaries.
@@ -96,8 +102,10 @@ export class SessionManager {
     // Generate a new keypair for this session
     // In production, this would use secp256k1 via ethers/viem
     // For the SDK, we generate a random 32-byte key and derive the address
-    const privateKey = crypto.randomBytes(32).toString('hex');
-    const address = this.deriveAddress(privateKey);
+    // C-02 FIX: Store key as Buffer for secure in-place zeroing
+    const privateKeyBuf = crypto.randomBytes(32);
+    const privateKeyHex = privateKeyBuf.toString('hex');
+    const address = this.deriveAddress(privateKeyHex);
 
     const now = new Date();
     const expiresAt = new Date(now.getTime() + config.durationSeconds * 1000);
@@ -115,7 +123,7 @@ export class SessionManager {
     };
 
     this.sessions.set(id, session);
-    this.sessionPrivateKeys.set(id, privateKey);
+    this.sessionPrivateKeys.set(id, Buffer.from(privateKeyHex, 'utf8'));
     this.sessionStates.set(id, {
       dailyVolumeWei: 0n,
       dailyResetDate: now.toDateString(),
@@ -217,10 +225,11 @@ export class SessionManager {
 
     session.revoked = true;
 
-    // Zero out the private key
-    const pk = this.sessionPrivateKeys.get(sessionId);
-    if (pk) {
-      this.sessionPrivateKeys.set(sessionId, '0'.repeat(pk.length));
+    // C-02 FIX: Zero out the private key Buffer in-place before deleting.
+    // Buffer.fill(0) overwrites the underlying ArrayBuffer memory directly.
+    const pkBuf = this.sessionPrivateKeys.get(sessionId);
+    if (pkBuf) {
+      pkBuf.fill(0);
       this.sessionPrivateKeys.delete(sessionId);
     }
 
@@ -290,10 +299,10 @@ export class SessionManager {
 
     for (const [id, session] of this.sessions) {
       if (session.revoked || new Date(session.expiresAt) <= now) {
-        // Ensure private key is zeroed
-        const pk = this.sessionPrivateKeys.get(id);
-        if (pk) {
-          this.sessionPrivateKeys.set(id, '0'.repeat(pk.length));
+        // C-02 FIX: Zero out Buffer in-place before deleting
+        const pkBuf = this.sessionPrivateKeys.get(id);
+        if (pkBuf) {
+          pkBuf.fill(0);
           this.sessionPrivateKeys.delete(id);
         }
         this.sessions.delete(id);

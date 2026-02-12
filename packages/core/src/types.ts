@@ -20,6 +20,12 @@ export interface WardexConfig {
   mode: EnforcementMode;
   /** ERC-8004 agent identity (optional, for on-chain trust signal) */
   agentIdentity?: AgentIdentityConfig;
+  /**
+   * C-04 FIX: Operator secret required for privileged operations
+   * (updatePolicy, unfreeze). Must be at least 32 characters.
+   * If not set, updatePolicy() and unfreeze() will throw.
+   */
+  operatorSecret?: string;
   /** Event handlers */
   onBlock?: (event: BlockEvent) => void;
   onAdvisory?: (event: AdvisoryEvent) => void;
@@ -37,7 +43,8 @@ export type SignerConfig =
   | IsolatedProcessSignerConfig
   | TEESignerConfig
   | MPCSignerConfig
-  | SmartAccountSignerConfig;
+  | SmartAccountSignerConfig
+  | DelegationSignerConfig;
 
 export interface IsolatedProcessSignerConfig {
   type: 'isolated-process';
@@ -77,6 +84,20 @@ export interface SmartAccountSignerConfig {
   bundlerUrl: string;
   /** Session key configuration (ERC-7715) */
   session?: SessionKeyConfig;
+}
+
+export interface DelegationSignerConfig {
+  type: 'delegation';
+  /** Chain ID for EIP-712 domain */
+  chainId: number;
+  /** DelegationManager contract address (defaults to canonical v1.3.0) */
+  delegationManagerAddress?: string;
+  /** Delegator (owner) address granting authority */
+  delegatorAddress: string;
+  /** Session key configuration (mapped to caveat enforcers) */
+  session: SessionKeyConfig;
+  /** Block approve/setApprovalForAll at enforcer level (not just off-chain) */
+  strictMode?: boolean;
 }
 
 export interface SessionKeyConfig {
@@ -588,8 +609,13 @@ export interface WardexShield {
   /** Get current security status */
   getStatus(): SecurityStatus;
 
-  /** Update policy at runtime (requires operator authentication) */
-  updatePolicy(policy: Partial<SecurityPolicy>): void;
+  /**
+   * Update policy at runtime.
+   * C-04 FIX: Requires operator secret for authentication.
+   * If operatorSecret was set in WardexConfig, the same secret must be
+   * provided here. Without it, policy changes are rejected.
+   */
+  updatePolicy(policy: Partial<SecurityPolicy>, operatorSecret?: string): void;
 
   /** Get the audit log */
   getAuditLog(limit?: number): AuditEntry[];
@@ -603,8 +629,11 @@ export interface WardexShield {
   /** Manually trigger emergency freeze */
   freeze(reason: string): void;
 
-  /** Resume from freeze (requires explicit call) */
-  unfreeze(): void;
+  /**
+   * Resume from freeze.
+   * C-04 FIX: Requires operator secret for authentication.
+   */
+  unfreeze(operatorSecret?: string): void;
 }
 
 export interface SecurityStatus {

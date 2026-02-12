@@ -17,7 +17,7 @@ import type {
   OutputFilter,
   AuditEntry,
 } from './types.js';
-import { compose, createMiddlewareContext } from './pipeline.js';
+import { compose, createMiddlewareContext, validateTransactionRequest } from './pipeline.js';
 import { createOutputFilter } from './output-filter.js';
 import { createContextAnalyzer } from './middleware/context-analyzer.js';
 import { transactionDecoder } from './middleware/transaction-decoder.js';
@@ -99,9 +99,83 @@ export function createShield(config: WardexConfig): WardexShield {
   }
 
   /**
+   * C-05 FIX: Wraps a custom middleware in a sandbox that prevents it from
+   * corrupting the pipeline state accumulated by core middleware.
+   *
+   * Protections:
+   * - Snapshots reasons[] and riskScores before the custom middleware runs
+   * - Restores any removed core reasons (custom can add, but not delete)
+   * - Restores any zeroed-out risk scores (custom can increase, but not decrease)
+   * - Prevents custom middleware from setting metadata.verdict directly
+   * - Freezes the policy object to prevent mutation
+   * - Catches exceptions from custom middleware (fail-open for pipeline continuity)
+   */
+  function sandboxMiddleware(mw: Middleware): Middleware {
+    return async (ctx, next) => {
+      // Snapshot core state before custom middleware
+      const reasonsSnapshot = [...ctx.reasons];
+      const scoresSnapshot = { ...ctx.riskScores };
+      const hadVerdict = 'verdict' in ctx.metadata;
+
+      // Freeze the policy to prevent mutation by custom middleware
+      const frozenPolicy = Object.freeze({ ...ctx.policy });
+      const originalPolicy = ctx.policy;
+      ctx.policy = frozenPolicy as typeof ctx.policy;
+
+      try {
+        await mw(ctx, next);
+      } catch (err) {
+        // C-05: Custom middleware threw — log but don't crash the pipeline.
+        // Add a reason noting the failure for audit trail.
+        ctx.reasons.push({
+          code: 'CUSTOM_MIDDLEWARE_ERROR',
+          message: `Custom middleware threw: ${err instanceof Error ? err.message : 'unknown error'}`,
+          severity: 'medium',
+          source: 'policy',
+        });
+      }
+
+      // Restore the real policy object
+      ctx.policy = originalPolicy;
+
+      // Validate: custom middleware must not remove existing reasons
+      // (it can add new ones, but core findings must be preserved)
+      for (const coreReason of reasonsSnapshot) {
+        if (!ctx.reasons.includes(coreReason)) {
+          ctx.reasons.push(coreReason);
+        }
+      }
+
+      // Validate: custom middleware must not decrease risk scores
+      for (const key of Object.keys(scoresSnapshot) as Array<keyof typeof scoresSnapshot>) {
+        const coreScore = scoresSnapshot[key];
+        const currentScore = ctx.riskScores[key];
+        if (coreScore !== undefined && (currentScore === undefined || currentScore < coreScore)) {
+          ctx.riskScores[key] = coreScore;
+        }
+      }
+
+      // Validate: custom middleware must not set verdict directly
+      // (only policyEngine should produce the final verdict)
+      if (!hadVerdict && ctx.metadata.verdict) {
+        delete ctx.metadata.verdict;
+        ctx.reasons.push({
+          code: 'MIDDLEWARE_VERDICT_OVERRIDE_BLOCKED',
+          message: 'Custom middleware attempted to set verdict directly — blocked',
+          severity: 'high',
+          source: 'policy',
+        });
+      }
+    };
+  }
+
+  /**
    * Builds the full middleware pipeline.
    */
   function buildPipeline(): Middleware {
+    // C-05 FIX: Wrap each custom middleware in a sandbox
+    const sandboxedCustom = customMiddlewares.map(sandboxMiddleware);
+
     return compose([
       // Core pipeline in order:
       // 1. Analyze conversation context for prompt injection
@@ -116,8 +190,8 @@ export function createShield(config: WardexConfig): WardexShield {
       contractChecker,
       // 6. Compare against behavioral baseline (anomaly detection)
       behavioralComparator,
-      // 7. Insert any custom operator middlewares
-      ...customMiddlewares,
+      // 7. Insert any custom operator middlewares (sandboxed)
+      ...sandboxedCustom,
       // 8. Aggregate all risk scores into composite
       riskAggregator,
       // 9. Apply policy rules and produce final verdict
@@ -190,6 +264,29 @@ export function createShield(config: WardexConfig): WardexShield {
       return frozenVerdict;
     }
 
+    // C-03 FIX: Validate transaction request before entering the pipeline.
+    // Reject malformed addresses early to prevent downstream confusion.
+    const validationError = validateTransactionRequest(tx);
+    if (validationError) {
+      const invalidVerdict: SecurityVerdict = {
+        decision: 'block',
+        riskScore: { context: 0, transaction: 100, behavioral: 0, composite: 100 },
+        reasons: [{
+          code: 'INVALID_TRANSACTION',
+          message: validationError,
+          severity: 'critical',
+          source: 'transaction',
+        }],
+        suggestions: ['Provide a valid Ethereum address (0x + 40 hex characters)'],
+        timestamp: new Date().toISOString(),
+        evaluationId: crypto.randomUUID(),
+        tierId: 'validation',
+      };
+      blockCount++;
+      recordAudit(tx, invalidVerdict, context, false);
+      return invalidVerdict;
+    }
+
     checkDailyReset();
     evaluationCount++;
 
@@ -241,20 +338,26 @@ export function createShield(config: WardexConfig): WardexShield {
     }
 
     // Track daily volume for approved transactions
+    // C-01 FIX: Check projected volume BEFORE incrementing to prevent
+    // TOCTOU race where blocked txs still inflate the volume counter.
     if (verdict.decision === 'approve') {
-      dailyVolumeWei += BigInt(tx.value ?? '0');
+      const txValueWei = BigInt(tx.value ?? '0');
+      const projectedVolume = dailyVolumeWei + txValueWei;
 
-      // Check if daily volume exceeds limit
-      if (dailyVolumeWei > BigInt(policy.limits.maxDailyVolumeWei)) {
+      if (projectedVolume > BigInt(policy.limits.maxDailyVolumeWei)) {
+        // Block the transaction — do NOT increment dailyVolumeWei
         verdict.decision = 'block';
         verdict.requiredAction = 'human_approval';
         verdict.reasons.push({
           code: 'DAILY_VOLUME_EXCEEDED',
-          message: 'Daily transaction volume limit exceeded',
+          message: `Daily transaction volume limit exceeded (projected: ${projectedVolume}, limit: ${policy.limits.maxDailyVolumeWei})`,
           severity: 'high',
           source: 'policy',
         });
         blockCount++;
+      } else {
+        // Only increment volume counter for actually approved transactions
+        dailyVolumeWei = projectedVolume;
       }
     }
 
@@ -314,8 +417,29 @@ export function createShield(config: WardexConfig): WardexShield {
       };
     },
 
-    updatePolicy(overrides: Partial<SecurityPolicy>): void {
+    updatePolicy(overrides: Partial<SecurityPolicy>, operatorSecret?: string): void {
+      // C-04 FIX: Require operator authentication for policy changes.
+      // An unauthenticated updatePolicy() could neutralize all security
+      // (e.g., set blockThreshold to 100, clear denylists, disable detection).
+      if (config.operatorSecret) {
+        if (!operatorSecret || operatorSecret !== config.operatorSecret) {
+          config.onThreat?.({
+            threatType: 'UNAUTHORIZED_POLICY_CHANGE',
+            severity: 'critical',
+            details: 'Attempted policy update with invalid or missing operator secret',
+          });
+          throw new Error('Unauthorized: invalid operator secret for updatePolicy()');
+        }
+      }
+
       policy = mergePolicy(policy, overrides);
+
+      // Emit audit event for all policy changes (even authenticated ones)
+      config.onThreat?.({
+        threatType: 'POLICY_UPDATED',
+        severity: 'low',
+        details: `Policy updated. Changed fields: ${Object.keys(overrides).join(', ')}`,
+      });
     },
 
     getAuditLog(limit?: number): AuditEntry[] {
@@ -343,7 +467,20 @@ export function createShield(config: WardexConfig): WardexShield {
       });
     },
 
-    unfreeze(): void {
+    unfreeze(operatorSecret?: string): void {
+      // C-04 FIX: Require operator authentication to unfreeze.
+      // Unfreezing is a privileged operation — an attacker who gains
+      // code execution shouldn't be able to silently unfreeze the system.
+      if (config.operatorSecret) {
+        if (!operatorSecret || operatorSecret !== config.operatorSecret) {
+          config.onThreat?.({
+            threatType: 'UNAUTHORIZED_UNFREEZE',
+            severity: 'critical',
+            details: 'Attempted unfreeze with invalid or missing operator secret',
+          });
+          throw new Error('Unauthorized: invalid operator secret for unfreeze()');
+        }
+      }
       frozen = false;
       freezeReason = '';
     },

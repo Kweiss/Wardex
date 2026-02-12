@@ -204,7 +204,13 @@ export interface SignerServerConfig {
 
 export class SignerServer {
   private server: net.Server | null = null;
-  private privateKey: string = '';
+  /**
+   * C-02 FIX: Store private key in a Buffer instead of a string.
+   * Buffers are backed by ArrayBuffer (C++ heap) and can be zeroed in-place.
+   * JS strings are immutable — assigning '0'.repeat(n) creates a new string
+   * while the original persists in the V8 heap until GC, leaking key material.
+   */
+  private privateKeyBuf: Buffer = Buffer.alloc(0);
   private config: SignerServerConfig;
 
   constructor(config: SignerServerConfig) {
@@ -215,10 +221,11 @@ export class SignerServer {
    * Starts the signer server, loading the encrypted key.
    */
   async start(): Promise<void> {
-    // Load and decrypt private key
+    // Load and decrypt private key into Buffer for secure zeroing
     const keyFileContent = fs.readFileSync(this.config.keyFilePath, 'utf8');
     const keyFile: EncryptedKeyFile = JSON.parse(keyFileContent);
-    this.privateKey = decryptPrivateKey(keyFile, this.config.keyPassword);
+    const decryptedKey = decryptPrivateKey(keyFile, this.config.keyPassword);
+    this.privateKeyBuf = Buffer.from(decryptedKey, 'utf8');
 
     // Remove existing socket file if it exists
     if (fs.existsSync(this.config.socketPath)) {
@@ -244,9 +251,11 @@ export class SignerServer {
    * Stops the signer server and zeroes out key material.
    */
   async stop(): Promise<void> {
-    // Zero out the private key in memory
-    this.privateKey = '0'.repeat(this.privateKey.length);
-    this.privateKey = '';
+    // C-02 FIX: Zero out the private key Buffer in-place.
+    // Buffer.fill(0) overwrites the underlying ArrayBuffer memory directly,
+    // unlike string reassignment which leaves the original in V8 heap.
+    this.privateKeyBuf.fill(0);
+    this.privateKeyBuf = Buffer.alloc(0);
 
     return new Promise((resolve) => {
       if (this.server) {
@@ -298,7 +307,7 @@ export class SignerServer {
       case 'get_address':
         return {
           success: true,
-          data: this.config.getAddressFn(this.privateKey),
+          data: this.config.getAddressFn(this.privateKeyBuf.toString('utf8')),
         };
 
       case 'sign_transaction': {
@@ -319,7 +328,7 @@ export class SignerServer {
         try {
           const signature = await this.config.signFn(
             request.serializedTx,
-            this.privateKey
+            this.privateKeyBuf.toString('utf8')
           );
           return { success: true, data: signature };
         } catch (err) {
@@ -347,7 +356,7 @@ export class SignerServer {
         try {
           const signature = await this.config.signFn(
             request.message,
-            this.privateKey
+            this.privateKeyBuf.toString('utf8')
           );
           return { success: true, data: signature };
         } catch (err) {

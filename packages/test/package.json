@@ -4,6 +4,7 @@
   "private": true,
   "description": "Integration tests for Wardex - covers all 7 attack vectors",
   "scripts": {
+    "build": "echo 'No build needed for test package'",
     "test": "vitest run",
     "test:watch": "vitest"
   },

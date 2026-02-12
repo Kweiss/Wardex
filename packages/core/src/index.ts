@@ -10,7 +10,12 @@ export { createWardex } from './wardex.js';
 export { defaultPolicy, mergePolicy } from './policy.js';
 export { createOutputFilter } from './output-filter.js';
 export { createShield } from './shield.js';
-export { compose, createMiddlewareContext } from './pipeline.js';
+export {
+  compose,
+  createMiddlewareContext,
+  isValidEthereumAddress,
+  validateTransactionRequest,
+} from './pipeline.js';
 
 // Middleware exports (for custom pipeline construction)
 export { createContextAnalyzer } from './middleware/context-analyzer.js';

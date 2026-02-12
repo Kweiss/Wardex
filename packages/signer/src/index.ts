@@ -27,3 +27,32 @@ export type {
   SessionState,
   SessionValidationResult,
 } from './session-manager.js';
+
+export { DelegationManager } from './delegation-manager.js';
+
+export type {
+  DelegationManagerConfig,
+  WardexDelegation,
+  Execution,
+  EIP712Domain,
+  TypedDataField,
+} from './delegation-manager.js';
+
+export {
+  mapSessionConfigToCaveats,
+  getDefaultEnforcerAddresses,
+  encodeAllowedTargets,
+  encodeValueLte,
+  encodeTimestamp,
+  encodeNativeTokenPeriod,
+  encodeBlockedApprovalMethods,
+  decodeAllowedTargets,
+  decodeValueLte,
+  decodeTimestamp,
+  decodeNativeTokenPeriod,
+} from './enforcer-mapping.js';
+
+export type {
+  CaveatTerm,
+  EnforcerAddresses,
+} from './enforcer-mapping.js';
