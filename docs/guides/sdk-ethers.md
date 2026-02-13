@@ -218,6 +218,8 @@ const wardex = createWardex({
     chainId: 1,
     // Optional: Etherscan API key for contract verification checks
     explorerApiKey: process.env.ETHERSCAN_API_KEY,
+    // Optional: explicit explorer endpoint override (recommended for non-mainnet chains)
+    // explorerApiUrl: 'https://api-sepolia.etherscan.io/api',
     // Optional: path to a local address denylist file
     denylistPath: './denylists/addresses.json',
   },
@@ -230,7 +232,7 @@ With intelligence enabled, the address checker and contract checker middleware u
 |---|---|
 | Address age | Flags addresses with < 7 days of on-chain activity |
 | Transaction count | Flags low-activity addresses as potentially risky |
-| Contract verification | Checks if contract source is verified on Etherscan |
+| Contract verification | Checks if contract source is verified using chain-aware explorer defaults (or `explorerApiUrl` override) |
 | Bytecode patterns | Detects SELFDESTRUCT, unsafe DELEGATECALL, proxy patterns |
 | Denylist | Matches against known-malicious addresses |
 

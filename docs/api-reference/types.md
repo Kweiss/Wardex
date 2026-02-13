@@ -130,6 +130,7 @@ interface IntelligenceConfig {
   chainId: number;                    // Chain ID
   denylistPath?: string;              // Path to local denylist file
   explorerApiKey?: string;            // Etherscan/block explorer API key
+  explorerApiUrl?: string;            // Explicit explorer API URL override
   enableOnChainAnalysis?: boolean;    // Enable on-chain age/activity analysis
   threatFeeds?: string[];             // Custom threat feed URLs
 }

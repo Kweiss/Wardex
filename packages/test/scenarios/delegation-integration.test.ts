@@ -14,6 +14,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { Wallet } from 'ethers';
 import { createWardex, defaultPolicy } from '@wardexai/core';
 import type { TransactionRequest } from '@wardexai/core';
 import { DelegationManager } from '@wardexai/signer';
@@ -25,6 +26,8 @@ import type { SessionKeyConfig, DelegationManagerConfig } from '@wardexai/signer
 
 const CHAIN_ID = 31337; // local / anvil
 const DELEGATOR = '0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266';
+const DELEGATOR_PRIVATE_KEY =
+  '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
 const SAFE_ADDRESS = '0x1111111111111111111111111111111111111111';
 const ATTACKER = '0xdead000000000000000000000000000000000001';
 
@@ -43,6 +46,17 @@ function createSessionConfig(
 
 function createDelegationConfig(): DelegationManagerConfig {
   return { chainId: CHAIN_ID };
+}
+
+async function signDelegation(
+  manager: DelegationManager,
+  delegationId: string,
+  privateKey = DELEGATOR_PRIVATE_KEY,
+): Promise<string> {
+  const payload = manager.getSigningPayload(delegationId);
+  if (!payload) throw new Error(`Delegation ${delegationId} not found`);
+  const wallet = new Wallet(privateKey);
+  return wallet.signTypedData(payload.domain, payload.types, payload.value);
 }
 
 // ---------------------------------------------------------------------------
@@ -66,7 +80,10 @@ describe('Delegation + Wardex Shield Integration', () => {
       createSessionConfig(),
       DELEGATOR,
     );
-    delegationMgr.setSignature(delegation.id, '0x' + 'ab'.repeat(65));
+    delegationMgr.setSignature(
+      delegation.id,
+      await signDelegation(delegationMgr, delegation.id),
+    );
 
     const tx: TransactionRequest = {
       to: SAFE_ADDRESS,
@@ -102,7 +119,10 @@ describe('Delegation + Wardex Shield Integration', () => {
       createSessionConfig(), // only allows SAFE_ADDRESS
       DELEGATOR,
     );
-    delegationMgr.setSignature(delegation.id, '0x' + 'ab'.repeat(65));
+    delegationMgr.setSignature(
+      delegation.id,
+      await signDelegation(delegationMgr, delegation.id),
+    );
 
     const tx: TransactionRequest = {
       to: '0x2222222222222222222222222222222222222222', // not in scope
@@ -142,7 +162,10 @@ describe('Delegation + Wardex Shield Integration', () => {
       createSessionConfig({ allowedContracts: [ATTACKER] }), // delegation allows it
       DELEGATOR,
     );
-    delegationMgr.setSignature(delegation.id, '0x' + 'ab'.repeat(65));
+    delegationMgr.setSignature(
+      delegation.id,
+      await signDelegation(delegationMgr, delegation.id),
+    );
 
     const tx: TransactionRequest = {
       to: ATTACKER,
@@ -184,7 +207,10 @@ describe('Delegation + Wardex Shield Integration', () => {
       createSessionConfig(),
       DELEGATOR,
     );
-    delegationMgr.setSignature(delegation.id, '0x' + 'ab'.repeat(65));
+    delegationMgr.setSignature(
+      delegation.id,
+      await signDelegation(delegationMgr, delegation.id),
+    );
 
     // ERC-20 approve with max uint256
     const approveData =
@@ -231,7 +257,10 @@ describe('Delegation + Wardex Shield Integration', () => {
       createSessionConfig(),
       DELEGATOR,
     );
-    delegationMgr.setSignature(original.id, '0x' + 'ab'.repeat(65));
+    delegationMgr.setSignature(
+      original.id,
+      await signDelegation(delegationMgr, original.id),
+    );
 
     const tx: TransactionRequest = {
       to: SAFE_ADDRESS,
@@ -252,7 +281,10 @@ describe('Delegation + Wardex Shield Integration', () => {
     // Rotate delegation
     const rotated = delegationMgr.rotateDelegation(original.id);
     expect(rotated).not.toBeNull();
-    delegationMgr.setSignature(rotated!.id, '0x' + 'cd'.repeat(65));
+    delegationMgr.setSignature(
+      rotated!.id,
+      await signDelegation(delegationMgr, rotated!.id),
+    );
 
     // Old delegation rejected
     const d2 = delegationMgr.validateTransaction(
@@ -296,7 +328,10 @@ describe('Delegation + Wardex Shield Integration', () => {
       createSessionConfig(),
       DELEGATOR,
     );
-    delegationMgr.setSignature(delegation.id, '0x' + 'ab'.repeat(65));
+    delegationMgr.setSignature(
+      delegation.id,
+      await signDelegation(delegationMgr, delegation.id),
+    );
 
     const tx: TransactionRequest = {
       to: SAFE_ADDRESS,

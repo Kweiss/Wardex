@@ -976,6 +976,9 @@ setSignature(delegationId: string, signature: string): void
 
 - Throws `Error` if the delegation is not found.
 - Throws `Error` if the delegation has been revoked.
+- Throws `Error` if `signature` is not a valid 65-byte hex ECDSA signature.
+- Throws `Error` if signature recovery fails for the expected EIP-712 payload.
+- Throws `Error` if the recovered signer does not match `delegator`.
 
 ---
 
@@ -1008,6 +1011,9 @@ prepareRedemption(
 ```
 
 Returns `null` if the delegation is not found or not signed.
+
+`calldata` is full function-encoded call data (including the `redeemDelegations` selector),
+ready to submit directly as transaction `data`.
 
 #### Usage
 

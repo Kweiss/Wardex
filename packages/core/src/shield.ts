@@ -68,6 +68,22 @@ function deepFreeze<T>(value: T): T {
   return Object.freeze(value);
 }
 
+function defaultExplorerApiUrlForChain(chainId: number): string | undefined {
+  const urls: Record<number, string> = {
+    1: 'https://api.etherscan.io/api',
+    11155111: 'https://api-sepolia.etherscan.io/api',
+    10: 'https://api-optimistic.etherscan.io/api',
+    11155420: 'https://api-sepolia-optimism.etherscan.io/api',
+    42161: 'https://api.arbiscan.io/api',
+    421614: 'https://api-sepolia.arbiscan.io/api',
+    8453: 'https://api.basescan.org/api',
+    84532: 'https://api-sepolia.basescan.org/api',
+    137: 'https://api.polygonscan.com/api',
+    80002: 'https://api-amoy.polygonscan.com/api',
+  };
+  return urls[chainId];
+}
+
 export function createShield(config: WardexConfig): WardexShield {
   let policy = config.policy;
   let frozen = false;
@@ -101,6 +117,16 @@ export function createShield(config: WardexConfig): WardexShield {
   let contractChecker: Middleware;
 
   if (config.intelligence) {
+    const explorerApiUrl =
+      config.intelligence.explorerApiUrl ??
+      defaultExplorerApiUrlForChain(config.intelligence.chainId);
+    if (config.intelligence.explorerApiKey && !explorerApiUrl) {
+      throw new Error(
+        `No default explorer API endpoint for chainId=${config.intelligence.chainId}. ` +
+        'Set intelligence.explorerApiUrl explicitly.'
+      );
+    }
+
     // Lazy-load intelligence provider. If @wardexai/intelligence isn't installed,
     // fall back to stub middleware with no external reputation lookups.
     try {
@@ -124,7 +150,7 @@ export function createShield(config: WardexConfig): WardexShield {
         chainId: config.intelligence.chainId,
         denylistPath: config.intelligence.denylistPath,
         explorerApiKey: config.intelligence.explorerApiKey,
-        explorerApiUrl: `https://api.etherscan.io/api`,
+        explorerApiUrl,
         requestTimeoutMs: config.intelligence.requestTimeoutMs,
       });
 

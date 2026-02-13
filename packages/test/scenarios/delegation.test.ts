@@ -15,7 +15,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { AbiCoder } from 'ethers';
+import { AbiCoder, Interface, Wallet } from 'ethers';
 import {
   DelegationManager,
   mapSessionConfigToCaveats,
@@ -44,9 +44,16 @@ const UNISWAP_ROUTER = '0x68b3465833fb72a70ecdf485e0e4c7bd8665fc45';
 const AAVE_POOL = '0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2';
 const RANDOM_CONTRACT = '0xdead000000000000000000000000000000000099';
 const DELEGATOR = '0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266';
+const DELEGATOR_PRIVATE_KEY =
+  '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
+const WRONG_PRIVATE_KEY =
+  '0x59c6995e998f97a5a0044976f094538f75852d4f2f5f0cf6f1cf0f34f4e1a5d5';
 const CHAIN_ID = 8453; // Base
 
 const coder = new AbiCoder();
+const deleGatorInterface = new Interface([
+  'function redeemDelegations((address delegate,address delegator,bytes32 authority,(address enforcer,bytes terms)[] caveats,uint256 salt,bytes signature)[][] delegations,uint256[] permissionContexts,bytes32[] modes,(address target,uint256 value,bytes callData)[][] executionCallDatas)',
+]);
 
 function createDefaultConfig(
   overrides?: Partial<SessionKeyConfig>,
@@ -68,6 +75,17 @@ function createDefaultManagerConfig(
     chainId: CHAIN_ID,
     ...overrides,
   };
+}
+
+async function signDelegation(
+  manager: DelegationManager,
+  delegationId: string,
+  privateKey = DELEGATOR_PRIVATE_KEY,
+): Promise<string> {
+  const payload = manager.getSigningPayload(delegationId);
+  if (!payload) throw new Error(`Delegation ${delegationId} not found`);
+  const wallet = new Wallet(privateKey);
+  return wallet.signTypedData(payload.domain, payload.types, payload.value);
 }
 
 // ---------------------------------------------------------------------------
@@ -297,7 +315,7 @@ describe('Delegation Creation', () => {
 // ---------------------------------------------------------------------------
 
 describe('Delegation Transaction Validation', () => {
-  function createSignedDelegation(
+  async function createSignedDelegation(
     manager: DelegationManager,
     config?: SessionKeyConfig,
   ) {
@@ -305,14 +323,14 @@ describe('Delegation Transaction Validation', () => {
       config ?? createDefaultConfig(),
       DELEGATOR,
     );
-    // Simulate signing
-    manager.setSignature(delegation.id, '0x' + 'ab'.repeat(65));
+    const signature = await signDelegation(manager, delegation.id);
+    manager.setSignature(delegation.id, signature);
     return delegation;
   }
 
-  it('should approve valid in-scope transaction', () => {
+  it('should approve valid in-scope transaction', async () => {
     const manager = new DelegationManager(createDefaultManagerConfig());
-    const delegation = createSignedDelegation(manager);
+    const delegation = await createSignedDelegation(manager);
 
     const result = manager.validateTransaction(
       delegation.id,
@@ -340,9 +358,9 @@ describe('Delegation Transaction Validation', () => {
     expect(result.reason).toContain('not been signed');
   });
 
-  it('should reject out-of-scope contract', () => {
+  it('should reject out-of-scope contract', async () => {
     const manager = new DelegationManager(createDefaultManagerConfig());
-    const delegation = createSignedDelegation(manager);
+    const delegation = await createSignedDelegation(manager);
 
     const result = manager.validateTransaction(
       delegation.id,
@@ -354,9 +372,9 @@ describe('Delegation Transaction Validation', () => {
     expect(result.reason).toContain('not in the allowed contracts');
   });
 
-  it('should reject over-limit value', () => {
+  it('should reject over-limit value', async () => {
     const manager = new DelegationManager(createDefaultManagerConfig());
-    const delegation = createSignedDelegation(manager);
+    const delegation = await createSignedDelegation(manager);
 
     const result = manager.validateTransaction(
       delegation.id,
@@ -368,9 +386,9 @@ describe('Delegation Transaction Validation', () => {
     expect(result.reason).toContain('exceeds per-tx limit');
   });
 
-  it('should reject when daily volume exceeded', () => {
+  it('should reject when daily volume exceeded', async () => {
     const manager = new DelegationManager(createDefaultManagerConfig());
-    const delegation = createSignedDelegation(manager);
+    const delegation = await createSignedDelegation(manager);
 
     // Record 4.5 ETH of prior transactions
     manager.recordTransaction(delegation.id, '4500000000000000000');
@@ -386,9 +404,9 @@ describe('Delegation Transaction Validation', () => {
     expect(result.reason).toContain('daily volume limit');
   });
 
-  it('should reject revoked delegation', () => {
+  it('should reject revoked delegation', async () => {
     const manager = new DelegationManager(createDefaultManagerConfig());
-    const delegation = createSignedDelegation(manager);
+    const delegation = await createSignedDelegation(manager);
     manager.revokeDelegation(delegation.id);
 
     const result = manager.validateTransaction(
@@ -401,9 +419,9 @@ describe('Delegation Transaction Validation', () => {
     expect(result.reason).toContain('revoked');
   });
 
-  it('should reject expired delegation', () => {
+  it('should reject expired delegation', async () => {
     const manager = new DelegationManager(createDefaultManagerConfig());
-    const delegation = createSignedDelegation(
+    const delegation = await createSignedDelegation(
       manager,
       createDefaultConfig({ durationSeconds: 0 }),
     );
@@ -419,9 +437,9 @@ describe('Delegation Transaction Validation', () => {
     expect(result.reason).toContain('expired');
   });
 
-  it('should reject infinite token approval', () => {
+  it('should reject infinite token approval', async () => {
     const manager = new DelegationManager(createDefaultManagerConfig());
-    const delegation = createSignedDelegation(manager);
+    const delegation = await createSignedDelegation(manager);
 
     // ERC-20 approve with max uint256
     const data =
@@ -441,9 +459,9 @@ describe('Delegation Transaction Validation', () => {
     expect(result.reason).toContain('Infinite token approval');
   });
 
-  it('should reject setApprovalForAll', () => {
+  it('should reject setApprovalForAll', async () => {
     const manager = new DelegationManager(createDefaultManagerConfig());
-    const delegation = createSignedDelegation(manager);
+    const delegation = await createSignedDelegation(manager);
 
     // setApprovalForAll(address, true)
     const data =
@@ -528,7 +546,7 @@ describe('EIP-712 Signing Payload', () => {
     expect(payload!.value.caveats).toHaveLength(4);
   });
 
-  it('should complete signing flow', () => {
+  it('should complete signing flow', async () => {
     const manager = new DelegationManager(createDefaultManagerConfig());
     const delegation = manager.createDelegation(
       createDefaultConfig(),
@@ -538,26 +556,55 @@ describe('EIP-712 Signing Payload', () => {
     // Verify unsigned
     expect(delegation.signature).toBe('');
 
-    // Simulate external signing
-    const mockSignature = '0x' + 'ab'.repeat(65);
-    manager.setSignature(delegation.id, mockSignature);
+    const signature = await signDelegation(manager, delegation.id);
+    manager.setSignature(delegation.id, signature);
 
     // Verify signed
     const updated = manager.getDelegation(delegation.id);
-    expect(updated!.signature).toBe(mockSignature);
+    expect(updated!.signature).toBe(signature);
   });
 
-  it('should reject signing revoked delegation', () => {
+  it('should reject signing revoked delegation', async () => {
     const manager = new DelegationManager(createDefaultManagerConfig());
     const delegation = manager.createDelegation(
       createDefaultConfig(),
       DELEGATOR,
     );
     manager.revokeDelegation(delegation.id);
+    const signature = await signDelegation(manager, delegation.id);
 
     expect(() => {
-      manager.setSignature(delegation.id, '0x' + 'ab'.repeat(65));
+      manager.setSignature(delegation.id, signature);
     }).toThrow('revoked');
+  });
+
+  it('should reject malformed delegation signatures', () => {
+    const manager = new DelegationManager(createDefaultManagerConfig());
+    const delegation = manager.createDelegation(
+      createDefaultConfig(),
+      DELEGATOR,
+    );
+
+    expect(() => manager.setSignature(delegation.id, '0x1234')).toThrow(
+      'Invalid delegation signature format',
+    );
+  });
+
+  it('should reject signatures from non-delegator keys', async () => {
+    const manager = new DelegationManager(createDefaultManagerConfig());
+    const delegation = manager.createDelegation(
+      createDefaultConfig(),
+      DELEGATOR,
+    );
+    const wrongSignature = await signDelegation(
+      manager,
+      delegation.id,
+      WRONG_PRIVATE_KEY,
+    );
+
+    expect(() => manager.setSignature(delegation.id, wrongSignature)).toThrow(
+      'Delegation signature signer mismatch',
+    );
   });
 
   it('should return null for unknown delegation', () => {
@@ -729,13 +776,14 @@ describe('Delegation Edge Cases', () => {
     expect(enforcers).not.toContain(addresses.timestamp);
   });
 
-  it('should prepare redemption calldata for signed delegation', () => {
+  it('should prepare redemption calldata for signed delegation', async () => {
     const manager = new DelegationManager(createDefaultManagerConfig());
     const delegation = manager.createDelegation(
       createDefaultConfig(),
       DELEGATOR,
     );
-    manager.setSignature(delegation.id, '0x' + 'ab'.repeat(65));
+    const signature = await signDelegation(manager, delegation.id);
+    manager.setSignature(delegation.id, signature);
 
     const redemption = manager.prepareRedemption(delegation.id, [
       {
@@ -751,6 +799,10 @@ describe('Delegation Edge Cases', () => {
     );
     expect(redemption!.value).toBe(100000000000000000n);
     expect(redemption!.calldata).toBeTruthy();
+    const expectedSelector = deleGatorInterface.getFunction(
+      'redeemDelegations',
+    )!.selector;
+    expect(redemption!.calldata.startsWith(expectedSelector)).toBe(true);
   });
 
   it('should return null for unsigned delegation redemption', () => {

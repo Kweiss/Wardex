@@ -130,6 +130,8 @@ Scans text for private keys, seed phrases, mnemonic sequences, and keystore data
 | `WARDEX_SIGNER_SOCKET` | `/tmp/wardex-signer.sock` | Unix socket path for the isolated signer |
 | `WARDEX_TRANSPORT` | `stdio` | Transport: `stdio` or `http` |
 | `WARDEX_PORT` | `3100` | HTTP port (only used with `http` transport) |
+| `WARDEX_HTTP_HOST` | `127.0.0.1` | HTTP bind host (only used with `http` transport) |
+| `WARDEX_HTTP_AUTH_TOKEN` | _(unset)_ | Optional Bearer token required for `/mcp` and `/` endpoints |
 
 ---
 
@@ -157,6 +159,11 @@ When running with `--transport http`, the server exposes three HTTP endpoints:
 | `/mcp` | POST | MCP protocol endpoint (Streamable HTTP / SSE) |
 | `/` | POST | Alias for `/mcp` |
 | `/health` | GET | Returns JSON status object |
+
+Notes:
+- By default, the HTTP server binds to `127.0.0.1` (localhost only).
+- If `WARDEX_HTTP_AUTH_TOKEN` is set, requests to `/mcp` and `/` must include `Authorization: Bearer <token>`.
+- `/health` remains unauthenticated for liveness probes.
 
 ### Health Check Response
 

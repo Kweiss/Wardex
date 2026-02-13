@@ -241,9 +241,9 @@ npx @wardexai/mcp-server --transport http --port 3100
 Expected output:
 
 ```
-[wardex] MCP server ready (HTTP transport on port 3100)
-[wardex] MCP endpoint: http://localhost:3100/mcp
-[wardex] Health check: http://localhost:3100/health
+[wardex] MCP server ready (HTTP transport on 127.0.0.1:3100)
+[wardex] MCP endpoint: http://127.0.0.1:3100/mcp
+[wardex] Health check: http://127.0.0.1:3100/health
 ```
 
 ### Endpoints
@@ -288,7 +288,16 @@ You can also configure HTTP transport via environment variables instead of CLI f
 ```bash
 export WARDEX_TRANSPORT=http
 export WARDEX_PORT=3100
+export WARDEX_HTTP_HOST=127.0.0.1
+# Optional: require Bearer auth on /mcp
+export WARDEX_HTTP_AUTH_TOKEN=replace-with-long-random-token
 npx @wardexai/mcp-server
+```
+
+If `WARDEX_HTTP_AUTH_TOKEN` is set, clients must send:
+
+```http
+Authorization: Bearer <token>
 ```
 
 ---

@@ -130,6 +130,8 @@ export interface IntelligenceConfig {
   denylistPath?: string;
   /** Etherscan/block explorer API key for contract verification */
   explorerApiKey?: string;
+  /** Explicit explorer API endpoint (overrides chain defaults) */
+  explorerApiUrl?: string;
   /** Enable on-chain age/activity analysis */
   enableOnChainAnalysis?: boolean;
   /** Timeout for RPC/explorer requests in milliseconds (default: 5000) */

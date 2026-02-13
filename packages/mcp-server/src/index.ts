@@ -20,6 +20,7 @@ import {
   CallToolRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { createServer as createHttpServer } from 'node:http';
+import { timingSafeEqual } from 'node:crypto';
 import { createWardex, defaultPolicy } from '@wardexai/core';
 import type {
   WardexShield,
@@ -276,6 +277,8 @@ async function startStdio(shield: WardexShield): Promise<void> {
 // ---------------------------------------------------------------------------
 
 async function startHttp(shield: WardexShield, port: number): Promise<void> {
+  const authToken = process.env.WARDEX_HTTP_AUTH_TOKEN;
+  const host = process.env.WARDEX_HTTP_HOST ?? '127.0.0.1';
   const server = createMCPServer(shield);
 
   const transport = new StreamableHTTPServerTransport({
@@ -283,6 +286,16 @@ async function startHttp(shield: WardexShield, port: number): Promise<void> {
   });
 
   await server.connect(transport);
+
+  function isAuthorized(authHeader: string | undefined): boolean {
+    if (!authToken) return true;
+    if (!authHeader?.startsWith('Bearer ')) return false;
+    const provided = authHeader.slice('Bearer '.length);
+    const expectedBuf = Buffer.from(authToken);
+    const providedBuf = Buffer.from(provided);
+    if (expectedBuf.length !== providedBuf.length) return false;
+    return timingSafeEqual(expectedBuf, providedBuf);
+  }
 
   const httpServer = createHttpServer(async (req, res) => {
     // Health check endpoint
@@ -294,6 +307,15 @@ async function startHttp(shield: WardexShield, port: number): Promise<void> {
 
     // MCP endpoint
     if (req.url === '/mcp' || req.url === '/') {
+      const authHeader = req.headers.authorization;
+      if (!isAuthorized(authHeader)) {
+        res.writeHead(401, {
+          'Content-Type': 'application/json',
+          'WWW-Authenticate': 'Bearer',
+        });
+        res.end(JSON.stringify({ error: 'Unauthorized' }));
+        return;
+      }
       await transport.handleRequest(req, res);
       return;
     }
@@ -302,10 +324,13 @@ async function startHttp(shield: WardexShield, port: number): Promise<void> {
     res.end('Not Found');
   });
 
-  httpServer.listen(port, () => {
-    console.error(`[wardex] MCP server ready (HTTP transport on port ${port})`);
-    console.error(`[wardex] MCP endpoint: http://localhost:${port}/mcp`);
-    console.error(`[wardex] Health check: http://localhost:${port}/health`);
+  httpServer.listen(port, host, () => {
+    console.error(`[wardex] MCP server ready (HTTP transport on ${host}:${port})`);
+    console.error(`[wardex] MCP endpoint: http://${host}:${port}/mcp`);
+    console.error(`[wardex] Health check: http://${host}:${port}/health`);
+    if (authToken) {
+      console.error('[wardex] HTTP auth enabled (Bearer token)');
+    }
   });
 }
 

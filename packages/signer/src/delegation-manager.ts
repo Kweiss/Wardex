@@ -19,7 +19,7 @@
  */
 
 import * as crypto from 'node:crypto';
-import { AbiCoder, computeAddress } from 'ethers';
+import { Interface, computeAddress, verifyTypedData } from 'ethers';
 import type { SessionKeyConfig } from './session-manager.js';
 import type { SessionValidationResult } from './session-manager.js';
 import {
@@ -146,7 +146,11 @@ const APPROVE_SELECTOR = '0x095ea7b3';
 const SET_APPROVAL_FOR_ALL_SELECTOR = '0xa22cb465';
 const INFINITE_THRESHOLD = BigInt(2) ** BigInt(128);
 
-const coder = new AbiCoder();
+const DELEGATOR_CORE_INTERFACE = new Interface([
+  'function redeemDelegations((address delegate,address delegator,bytes32 authority,(address enforcer,bytes terms)[] caveats,uint256 salt,bytes signature)[][] delegations,uint256[] permissionContexts,bytes32[] modes,(address target,uint256 value,bytes callData)[][] executionCallDatas)',
+]);
+const DEFAULT_MODE_CODE =
+  '0x0000000000000000000000000000000000000000000000000000000000000000';
 
 // ---------------------------------------------------------------------------
 // DelegationManager
@@ -444,6 +448,32 @@ export class DelegationManager {
     if (delegation.revoked) {
       throw new Error(`Delegation ${delegationId} has been revoked`);
     }
+    if (!/^0x[0-9a-fA-F]{130}$/.test(signature)) {
+      throw new Error('Invalid delegation signature format (expected 65-byte hex signature)');
+    }
+
+    const payload = this.getSigningPayload(delegationId);
+    if (!payload) {
+      throw new Error(`Delegation ${delegationId} not found`);
+    }
+
+    let recovered: string;
+    try {
+      recovered = verifyTypedData(
+        payload.domain,
+        payload.types,
+        payload.value,
+        signature,
+      );
+    } catch {
+      throw new Error('Invalid delegation signature');
+    }
+
+    if (recovered.toLowerCase() !== delegation.delegator) {
+      throw new Error(
+        `Delegation signature signer mismatch: expected ${delegation.delegator}, got ${recovered.toLowerCase()}`,
+      );
+    }
     delegation.signature = signature;
   }
 
@@ -488,16 +518,14 @@ export class DelegationManager {
       e.callData,
     ]);
 
-    // redeemDelegations selector: keccak256("redeemDelegations(bytes[],bytes32[],bytes[])") first 4 bytes
-    // Simplified: we ABI-encode the full call
-    const calldata = coder.encode(
-      [
-        'tuple(address,address,bytes32,tuple(address,bytes)[],uint256,bytes)[][]',
-        'tuple(address,uint256,bytes)[][]',
-      ],
+    // Encode full function data with selector for redeemDelegations(...)
+    const calldata = DELEGATOR_CORE_INTERFACE.encodeFunctionData(
+      'redeemDelegations',
       [
         [[delegationTuple]], // single delegation chain
-        [executionTuples],   // single execution batch
+        [0n], // single permission context
+        [DEFAULT_MODE_CODE], // single CALL mode code placeholder
+        [executionTuples], // single execution batch
       ],
     );
 

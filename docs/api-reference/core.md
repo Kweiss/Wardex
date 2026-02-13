@@ -117,12 +117,18 @@ const wardex = createWardex({
     rpcUrl: 'https://eth-mainnet.g.alchemy.com/v2/YOUR_KEY',
     chainId: 1,
     explorerApiKey: 'YOUR_ETHERSCAN_KEY',
+    // Optional: explicit explorer endpoint override
+    // explorerApiUrl: 'https://api.etherscan.io/api',
   },
   // ...
 });
 ```
 
 Type: [`IntelligenceConfig`](./types.md#intelligenceconfig) (optional) -- Threat intelligence sources for on-chain address and contract analysis.
+Explorer endpoint behavior:
+- If `explorerApiUrl` is provided, it is used.
+- Otherwise Wardex uses a chain-aware default for supported chains.
+- If `explorerApiKey` is set on an unsupported chain and no `explorerApiUrl` is provided, initialization fails with an explicit error.
 
 #### config.agentIdentity
 
