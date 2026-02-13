@@ -1,6 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/anthropics/claude-code/main/schemas/hooks.json",
-  "description": "Wardex PreToolUse hook - intercepts wallet-related tool calls for security evaluation before execution",
+  "$schema": "https://raw.githubusercontent.com/anthropics/claude-code/main/schemas/settings.json",
   "hooks": {
     "PreToolUse": [
       {

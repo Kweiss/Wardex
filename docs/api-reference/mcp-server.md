@@ -126,7 +126,7 @@ Scans text for private keys, seed phrases, mnemonic sequences, and keystore data
 
 | Variable | Default | Description |
 |---|---|---|
-| `WARDEX_MODE` | `adaptive` | Security mode: `adaptive`, `guardian`, or `copilot` |
+| `WARDEX_MODE` | `guardian` | Security mode: `adaptive`, `guardian`, or `copilot` |
 | `WARDEX_SIGNER_SOCKET` | `/tmp/wardex-signer.sock` | Unix socket path for the isolated signer |
 | `WARDEX_TRANSPORT` | `stdio` | Transport: `stdio` or `http` |
 | `WARDEX_PORT` | `3100` | HTTP port (only used with `http` transport) |
@@ -163,7 +163,7 @@ When running with `--transport http`, the server exposes three HTTP endpoints:
 ```json
 {
   "status": "ok",
-  "mode": "adaptive",
+  "mode": "guardian",
   "frozen": false,
   "evaluationCount": 0,
   "blockCount": 0,

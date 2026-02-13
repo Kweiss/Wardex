@@ -50,6 +50,7 @@ contract WardexValidationModule is IWardexValidationModule {
     event SpendingLimitSet(address indexed account, address indexed token, uint256 maxPerTx, uint256 maxPerDay);
     event AccountFrozen(address indexed account);
     event AccountUnfrozen(address indexed account);
+    event EntryPointUpdated(address indexed account, address indexed entryPoint);
     event TransactionApproved(address indexed account, bytes32 indexed userOpHash);
     event TransactionBlocked(address indexed account, bytes32 indexed userOpHash, string reason);
 
@@ -77,6 +78,7 @@ contract WardexValidationModule is IWardexValidationModule {
 
     struct AccountConfig {
         address evaluator;      // Address authorized to sign approval tokens
+        address entryPoint;     // Trusted caller for validateUserOp (ERC-4337 EntryPoint)
         bool frozen;            // Emergency freeze flag
         bool initialized;       // Whether this account has been set up
     }
@@ -120,6 +122,7 @@ contract WardexValidationModule is IWardexValidationModule {
 
         accounts[msg.sender] = AccountConfig({
             evaluator: evaluator,
+            entryPoint: address(0),
             frozen: false,
             initialized: true
         });
@@ -157,6 +160,13 @@ contract WardexValidationModule is IWardexValidationModule {
         uint256 /* missingAccountFunds */
     ) external override returns (uint256 validationData) {
         AccountConfig storage config = accounts[userOp.sender];
+
+        // Caller restriction: only the account itself (tests/simulation) or
+        // its configured ERC-4337 EntryPoint may invoke validation.
+        if (msg.sender != userOp.sender && msg.sender != config.entryPoint) {
+            emit TransactionBlocked(userOp.sender, userOpHash, "Unauthorized validation caller");
+            return 1; // Invalid
+        }
 
         // 1. Check freeze status
         if (config.frozen) {
@@ -294,6 +304,16 @@ contract WardexValidationModule is IWardexValidationModule {
     function unfreeze() external onlyAccount {
         accounts[msg.sender].frozen = false;
         emit AccountUnfrozen(msg.sender);
+    }
+
+    /**
+     * @notice Set the trusted EntryPoint for validateUserOp calls.
+     * @dev Set this to your ERC-4337 EntryPoint address in production.
+     */
+    function setEntryPoint(address entryPoint) external onlyAccount {
+        if (entryPoint == address(0)) revert ZeroAddress();
+        accounts[msg.sender].entryPoint = entryPoint;
+        emit EntryPointUpdated(msg.sender, entryPoint);
     }
 
     /**

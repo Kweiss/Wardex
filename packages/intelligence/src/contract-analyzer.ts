@@ -34,6 +34,7 @@ const EIP_1967_IMPL_SLOT = '360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3
 // EIP-1167 minimal proxy prefix
 const MINIMAL_PROXY_PREFIX = '363d3d373d3d3d363d73';
 const MINIMAL_PROXY_SUFFIX = '5af43d82803e903d91602b57fd5bf3';
+const MINIMAL_PROXY_TOTAL_LENGTH = MINIMAL_PROXY_PREFIX.length + 40 + MINIMAL_PROXY_SUFFIX.length;
 
 export interface BytecodeAnalysis {
   /** Whether SELFDESTRUCT opcode is present */
@@ -166,12 +167,16 @@ export function analyzeContractBytecode(bytecode: string): BytecodeAnalysis {
     analysis.hasFactoryCapability = true;
   }
 
-  // Check for EIP-1167 minimal proxy
-  if (code.includes(MINIMAL_PROXY_PREFIX)) {
+  // Check for EIP-1167 minimal proxy.
+  // Require canonical full-shape matching to reduce accidental substring matches.
+  if (
+    code.length >= MINIMAL_PROXY_TOTAL_LENGTH &&
+    code.startsWith(MINIMAL_PROXY_PREFIX) &&
+    code.slice(MINIMAL_PROXY_PREFIX.length + 40).startsWith(MINIMAL_PROXY_SUFFIX)
+  ) {
     analysis.isProxy = true;
     // Extract implementation address from minimal proxy bytecode
-    const prefixIndex = code.indexOf(MINIMAL_PROXY_PREFIX);
-    const addrStart = prefixIndex + MINIMAL_PROXY_PREFIX.length;
+    const addrStart = MINIMAL_PROXY_PREFIX.length;
     const addrHex = code.slice(addrStart, addrStart + 40);
     if (addrHex.length === 40) {
       analysis.implementationAddress = '0x' + addrHex;
@@ -221,8 +226,13 @@ export function analyzeContractBytecode(bytecode: string): BytecodeAnalysis {
  * (EIP-1167, EIP-1967, OpenZeppelin proxy, etc.)
  */
 function isStandardProxy(code: string): boolean {
+  const hasCanonicalMinimalProxy =
+    code.length >= MINIMAL_PROXY_TOTAL_LENGTH &&
+    code.startsWith(MINIMAL_PROXY_PREFIX) &&
+    code.slice(MINIMAL_PROXY_PREFIX.length + 40).startsWith(MINIMAL_PROXY_SUFFIX);
+
   return (
-    code.includes(MINIMAL_PROXY_PREFIX) ||
+    hasCanonicalMinimalProxy ||
     code.includes(EIP_1967_IMPL_SLOT) ||
     // OpenZeppelin TransparentUpgradeableProxy pattern
     code.includes('5c60da1b') // implementation() selector

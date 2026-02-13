@@ -65,6 +65,18 @@ describe('Contract Bytecode Analysis', () => {
     expect(analysis.implementationAddress).toBe('0xbebebebebebebebebebebebebebebebebebebebe');
   });
 
+  it('should not flag minimal proxy when prefix appears in non-canonical position', () => {
+    const prefixedNoise =
+      '0x6000' +
+      '363d3d373d3d3d363d73' +
+      'bebebebebebebebebebebebebebebebebebebebe' +
+      '5af43d82803e903d91602b57fd5bf3';
+    const analysis = analyzeContractBytecode(prefixedNoise);
+
+    expect(analysis.isProxy).toBe(false);
+    expect(analysis.implementationAddress).toBeUndefined();
+  });
+
   it('should detect EIP-1967 proxy pattern', () => {
     // Bytecode containing the EIP-1967 implementation storage slot
     const eip1967Proxy =
@@ -105,6 +117,14 @@ describe('Contract Bytecode Analysis', () => {
     const analysis = analyzeContractBytecode(factoryBytecode);
 
     expect(analysis.hasFactoryCapability).toBe(true);
+  });
+
+  it('should not flag factory capability when create opcodes are PUSH data only', () => {
+    // PUSH2 0xf500 ; STOP -> contains f5 in data but no CREATE/CREATE2 opcode execution.
+    const bytecode = '0x61f50000';
+    const analysis = analyzeContractBytecode(bytecode);
+
+    expect(analysis.hasFactoryCapability).toBe(false);
   });
 
   it('should not flag standard proxy DELEGATECALL', () => {

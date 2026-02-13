@@ -16,6 +16,7 @@ contract WardexValidationModuleTest is Test {
     uint256 evaluatorPk;
 
     address account;
+    address entryPoint;
 
     function setUp() public {
         module = new WardexValidationModule();
@@ -26,6 +27,7 @@ contract WardexValidationModuleTest is Test {
 
         // "account" is the smart account that calls into the module
         account = address(0xBEEF);
+        entryPoint = address(0x4337);
     }
 
     // -----------------------------------------------------------------------
@@ -284,5 +286,64 @@ contract WardexValidationModuleTest is Test {
         uint256 result = module.validateUserOp(userOp, userOpHash, 0);
 
         assertEq(result, 1, "Malformed signature should return 1");
+    }
+
+    function test_validateUserOp_rejectsUnauthorizedCaller() public {
+        vm.prank(account);
+        module.initialize(evaluator, 1 ether, 10 ether);
+
+        bytes32 userOpHash = keccak256("test-user-op");
+        bytes32 prefixedHash = keccak256(
+            abi.encodePacked("\x19Ethereum Signed Message:\n32", userOpHash)
+        );
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(evaluatorPk, prefixedHash);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        PackedUserOperation memory userOp = PackedUserOperation({
+            sender: account,
+            nonce: 0,
+            initCode: "",
+            callData: "",
+            accountGasLimits: bytes32(0),
+            preVerificationGas: 0,
+            gasFees: bytes32(0),
+            paymasterAndData: "",
+            signature: signature
+        });
+
+        vm.prank(address(0xCAFE));
+        uint256 result = module.validateUserOp(userOp, userOpHash, 0);
+        assertEq(result, 1, "Unauthorized caller should return 1");
+    }
+
+    function test_validateUserOp_allowsConfiguredEntryPoint() public {
+        vm.prank(account);
+        module.initialize(evaluator, 1 ether, 10 ether);
+
+        vm.prank(account);
+        module.setEntryPoint(entryPoint);
+
+        bytes32 userOpHash = keccak256("test-user-op");
+        bytes32 prefixedHash = keccak256(
+            abi.encodePacked("\x19Ethereum Signed Message:\n32", userOpHash)
+        );
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(evaluatorPk, prefixedHash);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        PackedUserOperation memory userOp = PackedUserOperation({
+            sender: account,
+            nonce: 0,
+            initCode: "",
+            callData: "",
+            accountGasLimits: bytes32(0),
+            preVerificationGas: 0,
+            gasFees: bytes32(0),
+            paymasterAndData: "",
+            signature: signature
+        });
+
+        vm.prank(entryPoint);
+        uint256 result = module.validateUserOp(userOp, userOpHash, 0);
+        assertEq(result, 0, "Configured EntryPoint should be allowed");
     }
 }

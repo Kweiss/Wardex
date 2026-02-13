@@ -11,7 +11,7 @@
  * 4. Returns a hook decision: allow, deny, or ask
  *
  * Configuration:
- *   WARDEX_MODE=guardian|copilot|adaptive (default: adaptive)
+ *   WARDEX_MODE=guardian|copilot|adaptive (default: guardian)
  *   WARDEX_SIGNER_SOCKET=/tmp/wardex-signer.sock (default)
  *
  * Exit codes:
@@ -160,7 +160,7 @@ async function main() {
         type: 'isolated-process',
         endpoint: process.env.WARDEX_SIGNER_SOCKET ?? '/tmp/wardex-signer.sock',
       },
-      mode: process.env.WARDEX_MODE ?? 'adaptive',
+      mode: process.env.WARDEX_MODE ?? 'guardian',
     });
 
     const verdict = await wardex.evaluate(tx);

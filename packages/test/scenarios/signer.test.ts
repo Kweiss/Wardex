@@ -12,6 +12,7 @@ import {
   encryptPrivateKey,
   decryptPrivateKey,
 } from '@wardexai/signer';
+import { keccak256, getBytes } from 'ethers';
 
 describe('Approval Token Management', () => {
   const SHARED_SECRET = 'test-shared-secret-for-wardex-unit-tests';
@@ -89,6 +90,23 @@ describe('Approval Token Management', () => {
     expect(
       verifyAndConsumeApprovalToken(token, TX_HASH, SHARED_SECRET, usedTokens, timestamp + 2000)
     ).toBe(false);
+  });
+
+  it('should compute transaction hash from serialized payload', () => {
+    const { computeSerializedTransactionHash } = require('@wardexai/signer/dist/isolated-process.js') as {
+      computeSerializedTransactionHash: (serializedTx: string) => string | null;
+    };
+    const serializedTx = '0x02c001';
+    const expected = keccak256(getBytes(serializedTx));
+    expect(computeSerializedTransactionHash(serializedTx)).toBe(expected);
+  });
+
+  it('should reject non-hex serialized payloads for hash computation', () => {
+    const { computeSerializedTransactionHash } = require('@wardexai/signer/dist/isolated-process.js') as {
+      computeSerializedTransactionHash: (serializedTx: string) => string | null;
+    };
+    expect(computeSerializedTransactionHash('not-hex')).toBeNull();
+    expect(computeSerializedTransactionHash('0xzz')).toBeNull();
   });
 });
 

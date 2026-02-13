@@ -127,8 +127,13 @@ value.
 # Add the MCP server
 claude mcp add wardex npx @wardexai/mcp-server
 
-# Copy the skill to your project
-cp -r node_modules/@wardexai/claude-skill/.claude/skills/wardex .claude/skills/
+# Install package
+npm install @wardexai/claude-skill
+
+# Copy skill files to your project
+mkdir -p .claude/skills/wardex
+cp node_modules/@wardexai/claude-skill/SKILL.md .claude/skills/wardex/SKILL.md
+cp -r node_modules/@wardexai/claude-skill/commands .claude/skills/wardex/
 
 # Copy the hooks configuration
 cp node_modules/@wardexai/claude-skill/hooks/pre-transaction.json .claude/hooks/

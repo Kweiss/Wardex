@@ -98,6 +98,20 @@ interface EscalationTracker {
 
 const ESCALATION_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
 const ESCALATION_THRESHOLD = 5; // Value must increase 5x within window
+const FALLBACK_ETH_PRICE_USD = 3500;
+
+function estimateUsdFromWei(valueWei?: string): number {
+  if (!valueWei) return 0;
+  try {
+    const wei = BigInt(valueWei);
+    if (wei <= 0n) return 0;
+    // Integer micro-dollar math to avoid precision issues.
+    const usdMicros = (wei * BigInt(FALLBACK_ETH_PRICE_USD * 1_000_000)) / (10n ** 18n);
+    return Number(usdMicros) / 1_000_000;
+  } catch {
+    return 0;
+  }
+}
 
 /**
  * Checks if transaction values are escalating suspiciously fast.
@@ -299,10 +313,15 @@ export function createContextAnalyzer(): {
     }
 
     // 4. Escalation detection
-    if (config.enableEscalationDetection && ctx.decoded) {
+    if (config.enableEscalationDetection) {
+      const currentValueUsd =
+        ctx.decoded?.estimatedValueUsd ??
+        (ctx.metadata.estimatedValueUsd as number | undefined) ??
+        estimateUsdFromWei(ctx.transaction.value);
+
       const escalationReason = detectEscalation(
         escalationTracker,
-        ctx.decoded.estimatedValueUsd
+        currentValueUsd
       );
       if (escalationReason) {
         ctx.reasons.push(escalationReason);

@@ -104,3 +104,91 @@ describe('createIntelligenceProvider - address age', () => {
     expect(reputation.ageDays).toBe(0);
   });
 });
+
+describe('createIntelligenceProvider - degradation handling', () => {
+  const realFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  it('should fall back gracefully when RPC is unavailable for address reputation', async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL) => {
+      throw new Error('RPC unreachable');
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const intel = createIntelligenceProvider({
+      rpcUrl: RPC_URL,
+      chainId: 1,
+    });
+
+    const reputation = await intel.getAddressReputation(ADDRESS);
+
+    expect(reputation.score).toBe(50);
+    expect(reputation.transactionCount).toBe(0);
+    expect(reputation.riskFactors).toContain(
+      'Could not fetch on-chain data - RPC unavailable'
+    );
+  });
+
+  it('should default to medium contract risk when RPC is unavailable', async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL) => {
+      throw new Error('RPC unreachable');
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const intel = createIntelligenceProvider({
+      rpcUrl: RPC_URL,
+      chainId: 1,
+    });
+
+    const analysis = await intel.getContractAnalysis(ADDRESS);
+
+    expect(analysis.risk).toBe('medium');
+    expect(analysis.isVerified).toBe(false);
+    expect(analysis.dangerousPatterns).toHaveLength(0);
+  });
+
+  it('should continue when explorer verification lookup fails', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url === RPC_URL && init?.method === 'POST') {
+        const payload = JSON.parse(String(init.body)) as { method: string };
+        if (payload.method === 'eth_getTransactionCount') {
+          return jsonResponse({ jsonrpc: '2.0', id: 1, result: '0x2' });
+        }
+        if (payload.method === 'eth_getCode') {
+          // Contract address
+          return jsonResponse({ jsonrpc: '2.0', id: 1, result: '0x60006000' });
+        }
+        if (payload.method === 'eth_getBalance') {
+          return jsonResponse({ jsonrpc: '2.0', id: 1, result: '0x0' });
+        }
+      }
+
+      if (url.includes('module=contract') && url.includes('action=getabi')) {
+        throw new Error('Explorer unavailable');
+      }
+      if (url.includes('module=account') && url.includes('action=txlist')) {
+        return jsonResponse({ status: '0', result: 'No transactions found' });
+      }
+
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const intel = createIntelligenceProvider({
+      rpcUrl: RPC_URL,
+      chainId: 1,
+      explorerApiKey: 'test-key',
+      explorerApiUrl: API_URL,
+    });
+
+    const reputation = await intel.getAddressReputation(ADDRESS);
+
+    expect(reputation.labels).toContain('contract');
+    expect(reputation.isVerified).toBe(false);
+    expect(reputation.score).toBeGreaterThanOrEqual(0);
+  });
+});

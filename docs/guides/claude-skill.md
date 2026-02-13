@@ -164,7 +164,7 @@ Display the current Wardex security system status: enforcement mode, freeze stat
 > /wardex-status
 
 Wardex Security Status
-Mode: adaptive
+Mode: guardian
 Frozen: No
 Evaluations: 42
 Blocked: 3
@@ -232,8 +232,15 @@ The hook script reads the same environment variables as the MCP server:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `WARDEX_MODE` | `adaptive` | Security mode: `guardian`, `copilot`, or `adaptive` |
+| `WARDEX_MODE` | `guardian` | Security mode: `guardian`, `copilot`, or `adaptive` |
 | `WARDEX_SIGNER_SOCKET` | `/tmp/wardex-signer.sock` | Unix socket path for the isolated signer process |
+
+For a shared, conservative setup, copy:
+
+```bash
+cp defaults/wardex.env.default .env
+cp defaults/claude-settings.default.json .claude/settings.json
+```
 
 The hook has a 15-second timeout. If evaluation takes longer than 15 seconds, Claude Code skips the hook and lets the tool call proceed.
 

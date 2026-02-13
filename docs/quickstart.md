@@ -18,6 +18,13 @@ npm install @wardexai/intelligence
 ```
 
 > **Using Claude Code?** Skip to the [MCP Server guide](./guides/mcp-server.md) or [Claude Skill guide](./guides/claude-skill.md) for a faster setup.
+>
+> **Want conservative defaults first?** Copy the shared defaults from [`defaults/`](../defaults/README.md):
+>
+> ```bash
+> cp defaults/wardex.env.default .env
+> cp defaults/claude-settings.default.json .claude/settings.json
+> ```
 
 ---
 

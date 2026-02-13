@@ -29,6 +29,13 @@ AI agents are getting wallets. When an LLM can sign transactions, every prompt i
 npm install @wardexai/core
 ```
 
+For a conservative zero-config baseline across agents and users, copy the defaults bundle:
+
+```bash
+cp defaults/wardex.env.default .env
+cp defaults/claude-settings.default.json .claude/settings.json
+```
+
 ```typescript
 import { createWardex, defaultPolicy } from '@wardexai/core';
 

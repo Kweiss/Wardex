@@ -146,7 +146,7 @@ Returns the current state of the Wardex security system. No inputs required.
 
 ```
 Wardex Security Status
-Mode: adaptive
+Mode: guardian
 Frozen: No
 Evaluations: 42
 Blocked: 3
@@ -160,7 +160,7 @@ If the system is frozen (emergency halt):
 
 ```
 Wardex Security Status
-Mode: adaptive
+Mode: guardian
 Frozen: YES - EMERGENCY
 Evaluations: 43
 Blocked: 4
@@ -201,10 +201,16 @@ The MCP server reads configuration from environment variables. Set them before l
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `WARDEX_MODE` | `adaptive` | Security mode: `guardian`, `copilot`, or `adaptive` |
+| `WARDEX_MODE` | `guardian` | Security mode: `guardian`, `copilot`, or `adaptive` |
 | `WARDEX_SIGNER_SOCKET` | `/tmp/wardex-signer.sock` | Unix socket path for the isolated signer process |
 | `WARDEX_TRANSPORT` | `stdio` | Transport protocol: `stdio` or `http` |
 | `WARDEX_PORT` | `3100` | HTTP port (only used when transport is `http`) |
+
+Use the shared defaults bundle for a conservative baseline:
+
+```bash
+cp defaults/wardex.env.default .env
+```
 
 **Modes explained:**
 
@@ -257,7 +263,7 @@ curl http://localhost:3100/health
 ```json
 {
   "status": "ok",
-  "mode": "adaptive",
+  "mode": "guardian",
   "frozen": false,
   "evaluationCount": 0,
   "blockCount": 0,

@@ -18,6 +18,7 @@
 import * as net from 'node:net';
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
+import { keccak256, getBytes } from 'ethers';
 
 // ---------------------------------------------------------------------------
 // Protocol Messages
@@ -214,6 +215,19 @@ interface EncryptedKeyFile {
   authTag: string;
   encryptedKey: string;
   salt: string;
+}
+
+/**
+ * Computes the canonical Ethereum transaction hash from a serialized transaction.
+ * Returns null if the payload is not valid hex data.
+ */
+export function computeSerializedTransactionHash(serializedTx: string): string | null {
+  if (!/^0x[0-9a-fA-F]+$/.test(serializedTx)) return null;
+  try {
+    return keccak256(getBytes(serializedTx));
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -463,6 +477,20 @@ export class SignerServer {
         };
 
       case 'sign_transaction': {
+        const computedHash = computeSerializedTransactionHash(request.serializedTx);
+        if (!computedHash) {
+          return {
+            success: false,
+            error: 'Invalid serialized transaction format',
+          };
+        }
+        if (computedHash.toLowerCase() !== request.transactionHash.toLowerCase()) {
+          return {
+            success: false,
+            error: 'Transaction hash does not match serialized payload',
+          };
+        }
+
         // Verify the Wardex approval token
         if (
           !verifyAndConsumeApprovalToken(

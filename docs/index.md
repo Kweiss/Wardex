@@ -17,6 +17,7 @@ Wardex is a TypeScript SDK that protects AI agents operating on Ethereum from th
 - **[Why Wardex](./why-wardex.md)** — The problem, the solution, and why your AI agent needs this
 - **[How It Works (ELI5)](./how-it-works.md)** — A plain-English explanation anyone can understand
 - **[Quickstart](./quickstart.md)** — Protect your first transaction in under 5 minutes
+- **[Defaults Bundle](../defaults/README.md)** — Conservative shared defaults for agents and users
 
 </td>
 <td width="50%">

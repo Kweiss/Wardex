@@ -329,6 +329,32 @@ describe('Output Filtering', () => {
     expect(result.redactions.some((r) => r.type === 'seed_phrase')).toBe(true);
     expect(result.filtered).toContain('[REDACTED BY WARDEX]');
   });
+
+  it('should detect mixed-case mnemonic phrases by default', () => {
+    const wardex = createTestWardex();
+    const filter = wardex.outputFilter;
+    const text =
+      'Recovery phrase: Abandon ABILITY able About above ABSENT ' +
+      'absorb ABSTRACT absurd ABUSE access accident';
+
+    const result = filter.filterText(text);
+
+    expect(result.redactions.some((r) => r.type === 'seed_phrase')).toBe(true);
+  });
+
+  it('should detect mnemonic phrases with punctuation and newlines', () => {
+    const wardex = createTestWardex();
+    const filter = wardex.outputFilter;
+    const text =
+      'Seed:\n' +
+      'abandon, ability, able, about, above, absent,\n' +
+      'absorb, abstract, absurd, abuse, access, accident';
+
+    const result = filter.filterText(text);
+
+    expect(result.redactions.some((r) => r.type === 'seed_phrase')).toBe(true);
+    expect(result.filtered).toContain('[REDACTED BY WARDEX]');
+  });
 });
 
 describe('Adaptive Tiers', () => {

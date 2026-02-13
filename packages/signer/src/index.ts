@@ -15,6 +15,7 @@ export {
   verifyAndConsumeApprovalToken,
   generateConnectionAuthProof,
   verifyConnectionAuthProof,
+  computeSerializedTransactionHash,
 } from './isolated-process.js';
 
 export type {

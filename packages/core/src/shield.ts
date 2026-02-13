@@ -17,6 +17,7 @@ import type {
   OutputFilter,
   AuditEntry,
 } from './types.js';
+import { isDeepStrictEqual } from 'node:util';
 import { compose, createMiddlewareContext, validateTransactionRequest } from './pipeline.js';
 import { createOutputFilter } from './output-filter.js';
 import { createContextAnalyzer } from './middleware/context-analyzer.js';
@@ -55,6 +56,16 @@ function sanitizeTransactionForAudit(tx: TransactionRequest): TransactionRequest
     ...tx,
     data: sanitizeCalldataForAudit(tx.data),
   };
+}
+
+function deepFreeze<T>(value: T): T {
+  if (value === null || typeof value !== 'object') return value;
+
+  const obj = value as Record<string, unknown>;
+  for (const key of Object.keys(obj)) {
+    deepFreeze(obj[key]);
+  }
+  return Object.freeze(value);
 }
 
 export function createShield(config: WardexConfig): WardexShield {
@@ -151,14 +162,23 @@ export function createShield(config: WardexConfig): WardexShield {
       const reasonsSnapshot = [...ctx.reasons];
       const scoresSnapshot = { ...ctx.riskScores };
       const hadVerdict = 'verdict' in ctx.metadata;
+      let nextCalled = false;
+      let downstreamVerdictSnapshot: unknown = hadVerdict
+        ? structuredClone(ctx.metadata.verdict)
+        : undefined;
 
-      // Freeze the policy to prevent mutation by custom middleware
-      const frozenPolicy = Object.freeze({ ...ctx.policy });
+      // Deep-clone + deep-freeze policy so custom middleware cannot mutate nested structures.
+      const frozenPolicy = deepFreeze(structuredClone(ctx.policy));
       const originalPolicy = ctx.policy;
       ctx.policy = frozenPolicy as typeof ctx.policy;
+      const guardedNext = async () => {
+        nextCalled = true;
+        await next();
+        downstreamVerdictSnapshot = structuredClone(ctx.metadata.verdict);
+      };
 
       try {
-        await mw(ctx, next);
+        await mw(ctx, guardedNext);
       } catch (err) {
         // C-05: Custom middleware threw — log but don't crash the pipeline.
         // Add a reason noting the failure for audit trail.
@@ -190,16 +210,37 @@ export function createShield(config: WardexConfig): WardexShield {
         }
       }
 
-      // Validate: custom middleware must not set verdict directly
-      // (only policyEngine should produce the final verdict)
-      if (!hadVerdict && ctx.metadata.verdict) {
-        delete ctx.metadata.verdict;
-        ctx.reasons.push({
-          code: 'MIDDLEWARE_VERDICT_OVERRIDE_BLOCKED',
-          message: 'Custom middleware attempted to set verdict directly — blocked',
-          severity: 'high',
-          source: 'policy',
-        });
+      // Validate: custom middleware must not set or tamper with verdict directly.
+      // Legitimate verdicts from downstream policyEngine are preserved.
+      if (!hadVerdict) {
+        if (!nextCalled && ctx.metadata.verdict) {
+          delete ctx.metadata.verdict;
+          ctx.reasons.push({
+            code: 'MIDDLEWARE_VERDICT_OVERRIDE_BLOCKED',
+            message: 'Custom middleware attempted to set verdict directly — blocked',
+            severity: 'high',
+            source: 'policy',
+          });
+        } else if (
+          nextCalled &&
+          !isDeepStrictEqual(ctx.metadata.verdict, downstreamVerdictSnapshot)
+        ) {
+          ctx.metadata.verdict = downstreamVerdictSnapshot as typeof ctx.metadata.verdict;
+          const tamperReason = {
+            code: 'MIDDLEWARE_VERDICT_TAMPER_BLOCKED',
+            message: 'Custom middleware attempted to modify verdict after policy evaluation — blocked',
+            severity: 'high',
+            source: 'policy',
+          } as const;
+          ctx.reasons.push(tamperReason);
+          if (
+            ctx.metadata.verdict &&
+            typeof ctx.metadata.verdict === 'object' &&
+            Array.isArray((ctx.metadata.verdict as { reasons?: unknown }).reasons)
+          ) {
+            ((ctx.metadata.verdict as { reasons: typeof ctx.reasons }).reasons).push(tamperReason);
+          }
+        }
       }
     };
   }

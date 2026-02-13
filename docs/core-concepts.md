@@ -189,6 +189,18 @@ Each instruction source is assigned a trust level:
 | Unknown tool | `low` | Any suspicious pattern gets elevated risk |
 | Untrusted source | `untrusted` | Heavily penalized in risk scoring |
 
+### Trust Calibration Defaults
+
+Wardex applies source trust as deterministic risk inputs before policy decisions:
+
+- `untrusted` source emits `UNTRUSTED_SOURCE` with **critical** severity.
+- `unknown` source type emits `UNKNOWN_SOURCE` with **high** severity.
+- Tool-output injections emit `CROSS_MCP_INJECTION` with **critical** severity.
+- Coherence mismatch emits `INCOHERENT_CONTEXT` with **medium** severity.
+- Escalation emits `VALUE_ESCALATION` with **high** severity when value rises >=5x inside 30 minutes.
+
+These findings map into the context risk score and then into the composite score used by tier/policy enforcement.
+
 ---
 
 ## Output Filtering

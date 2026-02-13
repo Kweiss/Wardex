@@ -38,7 +38,7 @@ function initShield(): WardexShield {
       type: 'isolated-process',
       endpoint: process.env.WARDEX_SIGNER_SOCKET ?? '/tmp/wardex-signer.sock',
     },
-    mode: (process.env.WARDEX_MODE as 'guardian' | 'copilot' | 'adaptive') ?? 'adaptive',
+    mode: (process.env.WARDEX_MODE as 'guardian' | 'copilot' | 'adaptive') ?? 'guardian',
   });
 }
 
