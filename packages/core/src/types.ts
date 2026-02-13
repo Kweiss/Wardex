@@ -18,6 +18,8 @@ export interface WardexConfig {
   intelligence?: IntelligenceConfig;
   /** Enforcement mode */
   mode: EnforcementMode;
+  /** Max evaluate() calls per second. Set <= 0 to disable. Default: 100 */
+  evaluationRateLimitPerSecond?: number;
   /** ERC-8004 agent identity (optional, for on-chain trust signal) */
   agentIdentity?: AgentIdentityConfig;
   /**
@@ -128,6 +130,8 @@ export interface IntelligenceConfig {
   explorerApiKey?: string;
   /** Enable on-chain age/activity analysis */
   enableOnChainAnalysis?: boolean;
+  /** Timeout for RPC/explorer requests in milliseconds (default: 5000) */
+  requestTimeoutMs?: number;
   /** Custom threat feed URLs */
   threatFeeds?: string[];
 }

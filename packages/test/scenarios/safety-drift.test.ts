@@ -576,3 +576,29 @@ describe('Safety Drift - Event Callbacks', () => {
     expect(threatEventReceived).toBe(true);
   });
 });
+
+describe('Safety Drift - Evaluation Rate Limiting', () => {
+  it('should block when evaluate rate exceeds configured per-second limit', async () => {
+    const wardex = createWardex({
+      policy: defaultPolicy(),
+      signer: { type: 'isolated-process', endpoint: '/tmp/test-signer.sock' },
+      mode: 'adaptive',
+      evaluationRateLimitPerSecond: 2,
+    });
+
+    const tx = {
+      to: LEGITIMATE_ADDRESS,
+      value: DUST_VALUE,
+      chainId: 1,
+    };
+
+    const verdict1 = await wardex.evaluate(tx);
+    const verdict2 = await wardex.evaluate(tx);
+    const verdict3 = await wardex.evaluate(tx);
+
+    expect(verdict1.decision).toBe('approve');
+    expect(verdict2.decision).toBe('approve');
+    expect(verdict3.decision).toBe('block');
+    expect(verdict3.reasons.some((r) => r.code === 'RATE_LIMIT_EXCEEDED')).toBe(true);
+  });
+});

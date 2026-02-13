@@ -29,6 +29,10 @@ import { riskAggregator } from './middleware/risk-aggregator.js';
 import { policyEngine } from './middleware/policy-engine.js';
 import { mergePolicy } from './policy.js';
 
+function utcDateKey(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
 export function createShield(config: WardexConfig): WardexShield {
   let policy = config.policy;
   let frozen = false;
@@ -37,10 +41,13 @@ export function createShield(config: WardexConfig): WardexShield {
   let blockCount = 0;
   let advisoryCount = 0;
   let dailyVolumeWei = 0n;
-  let dailyVolumeResetDate = new Date().toDateString();
+  let dailyVolumeResetDate = utcDateKey(new Date());
   let signerHealthy = true;
   let lastSignerCheck = 0;
   let intelligenceLastUpdated: string | undefined;
+  const evaluationRateLimitPerSecond = config.evaluationRateLimitPerSecond ?? 100;
+  let rateWindowEpochSecond = 0;
+  let rateWindowCount = 0;
 
   const auditLog: AuditEntry[] = [];
   const filter = createOutputFilter();
@@ -68,6 +75,7 @@ export function createShield(config: WardexConfig): WardexShield {
           denylistPath?: string;
           explorerApiKey?: string;
           explorerApiUrl?: string;
+          requestTimeoutMs?: number;
         }) => {
           getAddressReputation: (address: string) => Promise<import('./types.js').AddressReputation>;
           getContractAnalysis: (address: string) => Promise<import('./types.js').ContractAnalysis>;
@@ -80,6 +88,7 @@ export function createShield(config: WardexConfig): WardexShield {
         denylistPath: config.intelligence.denylistPath,
         explorerApiKey: config.intelligence.explorerApiKey,
         explorerApiUrl: `https://api.etherscan.io/api`,
+        requestTimeoutMs: config.intelligence.requestTimeoutMs,
       });
 
       addressChecker = createAddressChecker(
@@ -203,11 +212,24 @@ export function createShield(config: WardexConfig): WardexShield {
    * Resets daily volume counter if the date has changed.
    */
   function checkDailyReset(): void {
-    const today = new Date().toDateString();
+    const today = utcDateKey(new Date());
     if (today !== dailyVolumeResetDate) {
       dailyVolumeWei = 0n;
       dailyVolumeResetDate = today;
     }
+  }
+
+  function isEvaluationRateLimited(nowMs: number): boolean {
+    if (evaluationRateLimitPerSecond <= 0) return false;
+
+    const epochSecond = Math.floor(nowMs / 1000);
+    if (epochSecond !== rateWindowEpochSecond) {
+      rateWindowEpochSecond = epochSecond;
+      rateWindowCount = 0;
+    }
+
+    rateWindowCount++;
+    return rateWindowCount > evaluationRateLimitPerSecond;
   }
 
   /**
@@ -285,6 +307,32 @@ export function createShield(config: WardexConfig): WardexShield {
       blockCount++;
       recordAudit(tx, invalidVerdict, context, false);
       return invalidVerdict;
+    }
+
+    if (isEvaluationRateLimited(Date.now())) {
+      const rateLimitedVerdict: SecurityVerdict = {
+        decision: 'block',
+        riskScore: { context: 0, transaction: 0, behavioral: 0, composite: 100 },
+        reasons: [{
+          code: 'RATE_LIMIT_EXCEEDED',
+          message: `Evaluation rate limit exceeded (${evaluationRateLimitPerSecond}/sec). Retry shortly.`,
+          severity: 'high',
+          source: 'policy',
+        }],
+        suggestions: ['Retry after 1 second or increase evaluationRateLimitPerSecond'],
+        requiredAction: 'delay',
+        delaySeconds: 1,
+        timestamp: new Date().toISOString(),
+        evaluationId: crypto.randomUUID(),
+        tierId: 'rate-limit',
+      };
+      config.onThreat?.({
+        threatType: 'EVALUATION_RATE_LIMIT_EXCEEDED',
+        severity: 'high',
+        details: `Rate limit exceeded for evaluate(): ${evaluationRateLimitPerSecond}/sec`,
+      });
+      recordAudit(tx, rateLimitedVerdict, context, false);
+      return rateLimitedVerdict;
     }
 
     checkDailyReset();

@@ -21,6 +21,8 @@ export interface IntelligenceProviderConfig {
   explorerApiKey?: string;
   /** Block explorer API base URL */
   explorerApiUrl?: string;
+  /** Timeout for RPC/explorer requests in milliseconds (default: 5000) */
+  requestTimeoutMs?: number;
 }
 
 export interface IntelligenceProvider {
@@ -34,15 +36,32 @@ export interface IntelligenceProvider {
   refresh(): Promise<void>;
 }
 
+const DEFAULT_REQUEST_TIMEOUT_MS = 5000;
+
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 /**
  * Makes a JSON-RPC call to an Ethereum node.
  */
 async function rpcCall(
   rpcUrl: string,
   method: string,
-  params: unknown[]
+  params: unknown[],
+  timeoutMs: number
 ): Promise<unknown> {
-  const response = await fetch(rpcUrl, {
+  const response = await fetchWithTimeout(rpcUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -51,7 +70,7 @@ async function rpcCall(
       method,
       params,
     }),
-  });
+  }, timeoutMs);
 
   if (!response.ok) {
     throw new Error(`RPC request failed: ${response.status}`);
@@ -71,11 +90,12 @@ async function rpcCall(
 async function checkContractVerification(
   address: string,
   apiUrl: string,
-  apiKey: string
+  apiKey: string,
+  timeoutMs: number
 ): Promise<{ isVerified: boolean; contractName?: string }> {
   try {
     const url = `${apiUrl}?module=contract&action=getabi&address=${address}&apikey=${apiKey}`;
-    const response = await fetch(url);
+    const response = await fetchWithTimeout(url, { method: 'GET' }, timeoutMs);
     const data = await response.json() as { status: string; result: string };
 
     if (data.status === '1' && data.result !== 'Contract source code not verified') {
@@ -96,6 +116,7 @@ export function createIntelligenceProvider(
   const reputationCache = new Map<string, { data: AddressReputation; expiry: number }>();
   const contractCache = new Map<string, { data: ContractAnalysis; expiry: number }>();
   const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+  const requestTimeoutMs = config.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
 
   // Load initial denylist
   if (config.denylistPath) {
@@ -134,7 +155,8 @@ export function createIntelligenceProvider(
         const txCountHex = await rpcCall(
           config.rpcUrl,
           'eth_getTransactionCount',
-          [normalized, 'latest']
+          [normalized, 'latest'],
+          requestTimeoutMs
         ) as string;
         reputation.transactionCount = parseInt(txCountHex, 16);
 
@@ -142,7 +164,8 @@ export function createIntelligenceProvider(
         const code = await rpcCall(
           config.rpcUrl,
           'eth_getCode',
-          [normalized, 'latest']
+          [normalized, 'latest'],
+          requestTimeoutMs
         ) as string;
         const isContract = code !== '0x' && code !== '0x0';
 
@@ -150,7 +173,8 @@ export function createIntelligenceProvider(
         const balanceHex = await rpcCall(
           config.rpcUrl,
           'eth_getBalance',
-          [normalized, 'latest']
+          [normalized, 'latest'],
+          requestTimeoutMs
         ) as string;
         const balanceWei = BigInt(balanceHex);
 
@@ -171,7 +195,8 @@ export function createIntelligenceProvider(
             const verification = await checkContractVerification(
               normalized,
               config.explorerApiUrl,
-              config.explorerApiKey
+              config.explorerApiKey,
+              requestTimeoutMs
             );
             reputation.isVerified = verification.isVerified;
             if (verification.isVerified) {
@@ -225,7 +250,8 @@ export function createIntelligenceProvider(
         const code = await rpcCall(
           config.rpcUrl,
           'eth_getCode',
-          [normalized, 'latest']
+          [normalized, 'latest'],
+          requestTimeoutMs
         ) as string;
 
         if (code === '0x' || code === '0x0') {
@@ -251,7 +277,8 @@ export function createIntelligenceProvider(
           const verification = await checkContractVerification(
             normalized,
             config.explorerApiUrl,
-            config.explorerApiKey
+            config.explorerApiKey,
+            requestTimeoutMs
           );
           analysis.isVerified = verification.isVerified;
         }

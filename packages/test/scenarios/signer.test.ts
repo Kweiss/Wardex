@@ -6,7 +6,12 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import {
+  SignerServer,
+  SignerClient,
   generateApprovalToken,
   verifyApprovalToken,
   encryptPrivateKey,
@@ -71,6 +76,42 @@ describe('Approval Token Management', () => {
     );
 
     expect(token1).not.toBe(token2);
+  });
+
+  it('should reject replayed tokens at the signer server', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wardex-signer-test-'));
+    const socketPath = path.join(tempDir, 'signer.sock');
+    const keyFilePath = path.join(tempDir, 'key.json');
+    const keyPassword = 'test-password';
+    const timestamp = Date.now();
+    const token = generateApprovalToken(TX_HASH, SHARED_SECRET, timestamp);
+    const encrypted = encryptPrivateKey(
+      'ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
+      keyPassword
+    );
+    fs.writeFileSync(keyFilePath, JSON.stringify(encrypted), 'utf8');
+
+    const server = new SignerServer({
+      socketPath,
+      keyFilePath,
+      keyPassword,
+      sharedSecret: SHARED_SECRET,
+      signFn: async () => '0xsignature',
+      getAddressFn: () => '0x1234567890abcdef1234567890abcdef12345678',
+    });
+
+    try {
+      await server.start();
+      const client = new SignerClient({ socketPath });
+
+      // First use succeeds.
+      await expect(client.signTransaction('0xserialized-tx', TX_HASH, token)).resolves.toBe('0xsignature');
+      // Same token reused within validity window must be rejected.
+      await expect(client.signTransaction('0xserialized-tx', TX_HASH, token)).rejects.toThrow();
+    } finally {
+      await server.stop();
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 });
 

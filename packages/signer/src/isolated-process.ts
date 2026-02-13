@@ -93,7 +93,8 @@ const APPROVAL_TOKEN_MAX_AGE_MS = 5 * 60 * 1000;
 export function verifyApprovalToken(
   token: string,
   transactionHash: string,
-  sharedSecret: string
+  sharedSecret: string,
+  nowMs?: number
 ): boolean {
   // Token format: 64 hex chars (HMAC) + 16 hex chars (timestamp) = 80 chars
   if (!/^[0-9a-f]{80}$/i.test(token)) return false;
@@ -103,7 +104,8 @@ export function verifyApprovalToken(
   const timestamp = parseInt(tsHex, 16);
 
   // Check token age (reject expired tokens)
-  const age = Date.now() - timestamp;
+  const now = nowMs ?? Date.now();
+  const age = now - timestamp;
   if (age > APPROVAL_TOKEN_MAX_AGE_MS || age < 0) return false;
 
   // Recompute the expected HMAC
@@ -121,6 +123,39 @@ export function verifyApprovalToken(
   } catch {
     return false;
   }
+}
+
+/**
+ * Verifies and consumes an approval token for one-time use.
+ * Prevents replay by tracking tokens within their validity window.
+ */
+export function verifyAndConsumeApprovalToken(
+  token: string,
+  transactionHash: string,
+  sharedSecret: string,
+  usedTokens: Map<string, number>,
+  nowMs?: number
+): boolean {
+  const now = nowMs ?? Date.now();
+
+  // Remove expired entries from the replay cache.
+  for (const [usedToken, consumedAt] of usedTokens.entries()) {
+    if (now - consumedAt > APPROVAL_TOKEN_MAX_AGE_MS) {
+      usedTokens.delete(usedToken);
+    }
+  }
+
+  // Single-use enforcement.
+  if (usedTokens.has(token)) {
+    return false;
+  }
+
+  if (!verifyApprovalToken(token, transactionHash, sharedSecret, now)) {
+    return false;
+  }
+
+  usedTokens.set(token, now);
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -211,6 +246,7 @@ export class SignerServer {
    * while the original persists in the V8 heap until GC, leaking key material.
    */
   private privateKeyBuf: Buffer = Buffer.alloc(0);
+  private usedApprovalTokens: Map<string, number> = new Map();
   private config: SignerServerConfig;
 
   constructor(config: SignerServerConfig) {
@@ -256,6 +292,7 @@ export class SignerServer {
     // unlike string reassignment which leaves the original in V8 heap.
     this.privateKeyBuf.fill(0);
     this.privateKeyBuf = Buffer.alloc(0);
+    this.usedApprovalTokens.clear();
 
     return new Promise((resolve) => {
       if (this.server) {
@@ -313,15 +350,16 @@ export class SignerServer {
       case 'sign_transaction': {
         // Verify the Wardex approval token
         if (
-          !verifyApprovalToken(
+          !verifyAndConsumeApprovalToken(
             request.approvalToken,
             request.transactionHash,
-            this.config.sharedSecret
+            this.config.sharedSecret,
+            this.usedApprovalTokens
           )
         ) {
           return {
             success: false,
-            error: 'Invalid approval token - transaction was not approved by Wardex',
+            error: 'Invalid or replayed approval token - transaction was not approved by Wardex',
           };
         }
 
@@ -341,15 +379,16 @@ export class SignerServer {
 
       case 'sign_message': {
         if (
-          !verifyApprovalToken(
+          !verifyAndConsumeApprovalToken(
             request.approvalToken,
             request.message,
-            this.config.sharedSecret
+            this.config.sharedSecret,
+            this.usedApprovalTokens
           )
         ) {
           return {
             success: false,
-            error: 'Invalid approval token - message signing was not approved by Wardex',
+            error: 'Invalid or replayed approval token - message signing was not approved by Wardex',
           };
         }
 

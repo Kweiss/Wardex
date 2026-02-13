@@ -54,6 +54,47 @@ export interface BytecodeAnalysis {
   patterns: ContractPattern[];
 }
 
+interface OpcodeScanResult {
+  hasSelfDestruct: boolean;
+  hasDelegatecall: boolean;
+  hasCallcode: boolean;
+  hasCreate: boolean;
+  hasCreate2: boolean;
+}
+
+/**
+ * Scans EVM bytecode and distinguishes opcodes from PUSH data.
+ * This prevents false positives from byte patterns embedded in constants.
+ */
+function scanOpcodes(code: string): OpcodeScanResult {
+  const result: OpcodeScanResult = {
+    hasSelfDestruct: false,
+    hasDelegatecall: false,
+    hasCallcode: false,
+    hasCreate: false,
+    hasCreate2: false,
+  };
+
+  for (let i = 0; i + 1 < code.length; i += 2) {
+    const opcode = parseInt(code.slice(i, i + 2), 16);
+    if (Number.isNaN(opcode)) break;
+
+    if (opcode === 0xff) result.hasSelfDestruct = true; // SELFDESTRUCT
+    if (opcode === 0xf4) result.hasDelegatecall = true; // DELEGATECALL
+    if (opcode === 0xf2) result.hasCallcode = true; // CALLCODE
+    if (opcode === 0xf0) result.hasCreate = true; // CREATE
+    if (opcode === 0xf5) result.hasCreate2 = true; // CREATE2
+
+    // PUSH1..PUSH32 opcodes: skip their immediate data bytes.
+    if (opcode >= 0x60 && opcode <= 0x7f) {
+      const pushBytes = opcode - 0x5f;
+      i += pushBytes * 2;
+    }
+  }
+
+  return result;
+}
+
 /**
  * Analyzes raw EVM bytecode for dangerous patterns.
  * @param bytecode - Hex-encoded bytecode string (with or without 0x prefix)
@@ -76,11 +117,10 @@ export function analyzeContractBytecode(bytecode: string): BytecodeAnalysis {
     return analysis;
   }
 
+  const opcodeScan = scanOpcodes(code);
+
   // Check for SELFDESTRUCT opcode
-  // Note: We search for the opcode byte, but must be careful about
-  // false positives (it could appear as data, not as an opcode).
-  // We check for it in reasonable positions.
-  if (code.includes(OPCODES.SELFDESTRUCT)) {
+  if (opcodeScan.hasSelfDestruct) {
     analysis.hasSelfDestruct = true;
     patterns.push({
       name: 'SELFDESTRUCT',
@@ -93,7 +133,7 @@ export function analyzeContractBytecode(bytecode: string): BytecodeAnalysis {
   }
 
   // Check for DELEGATECALL opcode
-  if (code.includes(OPCODES.DELEGATECALL)) {
+  if (opcodeScan.hasDelegatecall) {
     analysis.hasDelegatecall = true;
     // Only flag as dangerous if it doesn't look like a standard proxy
     if (!isStandardProxy(code)) {
@@ -109,7 +149,7 @@ export function analyzeContractBytecode(bytecode: string): BytecodeAnalysis {
   }
 
   // Check for deprecated CALLCODE opcode
-  if (code.includes(OPCODES.CALLCODE)) {
+  if (opcodeScan.hasCallcode) {
     analysis.hasCallcode = true;
     patterns.push({
       name: 'CALLCODE',
@@ -122,7 +162,7 @@ export function analyzeContractBytecode(bytecode: string): BytecodeAnalysis {
   }
 
   // Check for CREATE/CREATE2 (factory patterns)
-  if (code.includes(OPCODES.CREATE) || code.includes(OPCODES.CREATE2)) {
+  if (opcodeScan.hasCreate || opcodeScan.hasCreate2) {
     analysis.hasFactoryCapability = true;
   }
 

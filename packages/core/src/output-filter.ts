@@ -191,11 +191,11 @@ export function createOutputFilter(
 
       // 1. Detect private keys
       for (const pattern of PRIVATE_KEY_PATTERNS) {
-        // Reset regex state
-        pattern.lastIndex = 0;
+        // Clone the pattern per invocation to avoid shared lastIndex state.
+        const localPattern = new RegExp(pattern.source, pattern.flags);
         let keyMatch: RegExpExecArray | null;
 
-        while ((keyMatch = pattern.exec(text)) !== null) {
+        while ((keyMatch = localPattern.exec(text)) !== null) {
           redactions.push({
             type: 'private_key',
             start: keyMatch.index,
@@ -217,9 +217,10 @@ export function createOutputFilter(
       }
 
       // 3. Detect keystore file patterns
-      KEYSTORE_PATTERN.lastIndex = 0;
+      // Clone the pattern per invocation to avoid shared lastIndex state.
+      const keystorePattern = new RegExp(KEYSTORE_PATTERN.source, KEYSTORE_PATTERN.flags);
       let keystoreMatch: RegExpExecArray | null;
-      while ((keystoreMatch = KEYSTORE_PATTERN.exec(text)) !== null) {
+      while ((keystoreMatch = keystorePattern.exec(text)) !== null) {
         redactions.push({
           type: 'keystore',
           start: keystoreMatch.index,

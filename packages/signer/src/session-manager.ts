@@ -20,6 +20,10 @@
 
 import * as crypto from 'node:crypto';
 
+function utcDateKey(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -126,7 +130,7 @@ export class SessionManager {
     this.sessionPrivateKeys.set(id, Buffer.from(privateKeyHex, 'utf8'));
     this.sessionStates.set(id, {
       dailyVolumeWei: 0n,
-      dailyResetDate: now.toDateString(),
+      dailyResetDate: utcDateKey(now),
       transactionCount: 0,
       contractsUsed: new Set(),
     });
@@ -322,7 +326,7 @@ export class SessionManager {
    * Resets the daily volume counter if the date has changed.
    */
   private checkDailyReset(state: SessionState): void {
-    const today = new Date().toDateString();
+    const today = utcDateKey(new Date());
     if (today !== state.dailyResetDate) {
       state.dailyVolumeWei = 0n;
       state.dailyResetDate = today;

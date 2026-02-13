@@ -12,6 +12,7 @@ export {
   decryptPrivateKey,
   generateApprovalToken,
   verifyApprovalToken,
+  verifyAndConsumeApprovalToken,
 } from './isolated-process.js';
 
 export type {

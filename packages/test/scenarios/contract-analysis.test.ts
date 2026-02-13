@@ -19,6 +19,15 @@ describe('Contract Bytecode Analysis', () => {
     expect(analysis.patterns.find((p) => p.name === 'SELFDESTRUCT')?.severity).toBe('critical');
   });
 
+  it('should not flag SELFDESTRUCT when ff appears only in PUSH data', () => {
+    // PUSH1 0xff ; STOP. Contains byte ff as data, not opcode.
+    const bytecode = '0x60ff00';
+    const analysis = analyzeContractBytecode(bytecode);
+
+    expect(analysis.hasSelfDestruct).toBe(false);
+    expect(analysis.patterns.some((p) => p.name === 'SELFDESTRUCT')).toBe(false);
+  });
+
   it('should detect DELEGATECALL opcode (non-proxy)', () => {
     // Bytecode with DELEGATECALL (F4) but not matching standard proxy patterns
     const bytecodeWithDelegatecall = '0x60806040526004f4';
@@ -26,6 +35,15 @@ describe('Contract Bytecode Analysis', () => {
 
     expect(analysis.hasDelegatecall).toBe(true);
     expect(analysis.patterns.some((p) => p.name === 'DELEGATECALL')).toBe(true);
+  });
+
+  it('should not flag DELEGATECALL when f4 appears only in PUSH data', () => {
+    // PUSH2 0xf400 ; STOP. Contains byte f4 as pushed data.
+    const bytecode = '0x61f40000';
+    const analysis = analyzeContractBytecode(bytecode);
+
+    expect(analysis.hasDelegatecall).toBe(false);
+    expect(analysis.patterns.some((p) => p.name === 'DELEGATECALL')).toBe(false);
   });
 
   it('should detect deprecated CALLCODE opcode', () => {

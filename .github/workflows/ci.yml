@@ -30,7 +30,7 @@ jobs:
         run: npm run build
 
       - name: Run TypeScript tests
-        run: npx vitest run
+        run: npm test
 
   test-solidity:
     name: Solidity Tests
