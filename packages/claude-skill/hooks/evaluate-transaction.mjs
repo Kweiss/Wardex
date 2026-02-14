@@ -19,7 +19,7 @@
  *   2 = block (stderr message fed back to Claude)
  */
 
-import { createReadStream } from 'node:fs';
+import { createWardex, defaultPolicy } from '@wardexai/core';
 
 // Read all stdin into a string
 async function readStdin() {
@@ -151,9 +151,6 @@ async function main() {
 
   // Evaluate using Wardex core (inline, no IPC needed for evaluation)
   try {
-    // Dynamic import of @wardexai/core
-    const { createWardex, defaultPolicy } = await import('@wardexai/core');
-
     const wardex = createWardex({
       policy: defaultPolicy(),
       signer: {

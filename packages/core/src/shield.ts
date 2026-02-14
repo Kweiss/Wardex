@@ -105,6 +105,7 @@ export function createShield(config: WardexConfig): WardexShield {
   const auditLog: AuditEntry[] = [];
   const filter = createOutputFilter();
   const customMiddlewares: Middleware[] = [];
+  let cachedPipeline: Middleware | null = null;
 
   const { middleware: contextAnalyzer } = createContextAnalyzer();
   const valueAssessor = createValueAssessor();
@@ -273,12 +274,15 @@ export function createShield(config: WardexConfig): WardexShield {
 
   /**
    * Builds the full middleware pipeline.
+   * The result is cached and reused until invalidated by use().
    */
   function buildPipeline(): Middleware {
+    if (cachedPipeline) return cachedPipeline;
+
     // C-05 FIX: Wrap each custom middleware in a sandbox
     const sandboxedCustom = customMiddlewares.map(sandboxMiddleware);
 
-    return compose([
+    cachedPipeline = compose([
       // Core pipeline in order:
       // 1. Analyze conversation context for prompt injection
       contextAnalyzer,
@@ -299,6 +303,7 @@ export function createShield(config: WardexConfig): WardexShield {
       // 9. Apply policy rules and produce final verdict
       policyEngine,
     ]);
+    return cachedPipeline;
   }
 
   /**
@@ -593,6 +598,7 @@ export function createShield(config: WardexConfig): WardexShield {
 
     use(middleware: Middleware): void {
       customMiddlewares.push(middleware);
+      cachedPipeline = null; // Invalidate so buildPipeline() recomposes
     },
 
     isFrozen(): boolean {

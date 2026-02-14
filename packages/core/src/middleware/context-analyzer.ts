@@ -255,6 +255,10 @@ export function createContextAnalyzer(): {
     recentTransactionValues: [],
   };
 
+  // Cache compiled RegExp objects for custom suspicious patterns to avoid
+  // recompiling on every evaluation.
+  const compiledCustomPatterns = new Map<string, RegExp>();
+
   const middleware: Middleware = async (ctx: MiddlewareContext, next) => {
     const config = ctx.policy.contextAnalysis;
 
@@ -282,9 +286,13 @@ export function createContextAnalyzer(): {
         }
       }
 
-      // Also check custom patterns from policy
+      // Also check custom patterns from policy (RegExp compiled once and cached)
       for (const customPattern of config.suspiciousPatterns) {
-        const regex = new RegExp(customPattern, 'i');
+        let regex = compiledCustomPatterns.get(customPattern);
+        if (!regex) {
+          regex = new RegExp(customPattern, 'i');
+          compiledCustomPatterns.set(customPattern, regex);
+        }
         for (const message of ctx.conversationContext.messages) {
           if (regex.test(message.content)) {
             ctx.reasons.push({

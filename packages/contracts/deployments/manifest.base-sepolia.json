@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "contract": "WardexValidationModule",
+  "deployment": {
+    "network": "base-sepolia",
+    "chainId": 84532,
+    "address": "0xf1ba5470018bed0d41a6bb4e9da695e93f83b2aa",
+    "deployer": "0x57709a6476dc83aee9a1a7d31a686ccc03a6dc59",
+    "deployedAt": "2026-02-14T00:45:04.000Z",
+    "transactionHash": "0x8bb71e40b89ca84b99b9ad0e2d835444383a564c997adfeb7082955836eaeaeb",
+    "blockNumber": 37630809
+  },
+  "verification": {
+    "status": "verified",
+    "explorerName": "BaseScan",
+    "explorerUrl": "https://sepolia.basescan.org/address/0xf1ba5470018bed0d41a6bb4e9da695e93f83b2aa",
+    "verifyCommand": "forge verify-contract 0xf1ba5470018bed0d41a6bb4e9da695e93f83b2aa src/WardexValidationModule.sol:WardexValidationModule --chain 84532 --etherscan-api-key $ETHERSCAN_KEY"
+  },
+  "build": {
+    "gitCommit": "6ec301f",
+    "foundryProfile": "default",
+    "solcVersion": "0.8.24",
+    "optimizer": true,
+    "optimizerRuns": 200
+  },
+  "artifacts": {
+    "abiPath": "out/WardexValidationModule.sol/WardexValidationModule.json",
+    "bytecodePath": "out/WardexValidationModule.sol/WardexValidationModule.json"
+  },
+  "notes": [
+    "Set entry point after module installation via setEntryPoint(address).",
+    "Record evaluator address and initial limits used during initialize()."
+  ]
+}

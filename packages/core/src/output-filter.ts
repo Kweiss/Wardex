@@ -126,7 +126,14 @@ function loadDefaultBip39Wordlist(): Set<string> {
   return words;
 }
 
-const DEFAULT_BIP39_WORDLIST = loadDefaultBip39Wordlist();
+let _defaultBip39Wordlist: Set<string> | null = null;
+
+function getDefaultBip39Wordlist(): Set<string> {
+  if (!_defaultBip39Wordlist) {
+    _defaultBip39Wordlist = loadDefaultBip39Wordlist();
+  }
+  return _defaultBip39Wordlist;
+}
 
 /**
  * Detects hex-encoded private keys.
@@ -220,7 +227,6 @@ function findMnemonicSequences(
 export function createOutputFilter(
   bip39Wordlist?: Set<string>
 ): OutputFilter {
-  const wordlist = bip39Wordlist ?? DEFAULT_BIP39_WORDLIST;
 
   return {
     filterText(text: string): FilterResult {
@@ -245,6 +251,8 @@ export function createOutputFilter(
       }
 
       // 2. Detect seed phrases / mnemonics
+      // Wordlist is resolved lazily to avoid loading 2048 BIP-39 words at import time.
+      const wordlist = bip39Wordlist ?? getDefaultBip39Wordlist();
       const mnemonicMatches = findMnemonicSequences(text, wordlist);
       for (const match of mnemonicMatches) {
         redactions.push({

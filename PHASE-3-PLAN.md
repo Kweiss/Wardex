@@ -39,12 +39,12 @@ Ship production-ready on-chain enforcement and account-abstraction integration:
 - [ ] Document operational key-rotation and emergency-revocation playbook
 
 ### 3) Deployment & Promotion Pipeline
-- [ ] Deploy `WardexValidationModule` to Base Sepolia and capture:
-  - deployed address
-  - chain ID
-  - verification URL
-  - deploy commit SHA
-- [ ] Run full E2E runbook against Base Sepolia using deployed module
+- [x] Deploy `WardexValidationModule` to Base Sepolia and capture:
+  - deployed address: `0xf1ba5470018bed0d41a6bb4e9da695e93f83b2aa`
+  - chain ID: 84532
+  - verification URL: https://sepolia.basescan.org/address/0xf1ba5470018bed0d41a6bb4e9da695e93f83b2aa
+  - deploy commit SHA: `6ec301f`
+- [x] Run full E2E runbook against Base Sepolia using deployed module (6/6 passed, 4 SDK tests green against live RPC)
 - [ ] Gate to Base mainnet with explicit go/no-go checklist
 - [ ] Gate to Ethereum mainnet with explicit go/no-go checklist
 
@@ -62,8 +62,8 @@ Ship production-ready on-chain enforcement and account-abstraction integration:
 
 ### P0 (must complete before mainnet)
 - [ ] 4337 compatibility validation matrix across target account types
-- [ ] Base Sepolia deployment + verification + reproducible artifact capture
-- [ ] E2E pass against deployed testnet module (not local-only)
+- [x] Base Sepolia deployment + verification + reproducible artifact capture
+- [x] E2E pass against deployed testnet module (not local-only)
 - [ ] Evaluator key-management + incident runbook finalized
 
 ### P1 (should complete in Phase 3)
@@ -78,9 +78,9 @@ Ship production-ready on-chain enforcement and account-abstraction integration:
 ## Milestones
 
 ### M1: Testnet Readiness
-- [ ] Contract behavior locked for testnet
-- [ ] Deployment runbook dry-run complete
-- [ ] Base Sepolia deployment verified
+- [x] Contract behavior locked for testnet
+- [x] Deployment runbook dry-run complete
+- [x] Base Sepolia deployment verified
 
 ### M2: Mainnet Readiness
 - [ ] P0 items complete
